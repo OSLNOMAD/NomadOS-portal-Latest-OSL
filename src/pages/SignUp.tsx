@@ -1,21 +1,24 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
 import Button from '../components/Button'
 
-type Step = 'email' | 'confirm-email' | 'phone' | 'verify-phone' | 'verify-email'
+type Step = 'email' | 'confirm-email' | 'phone' | 'verify-phone' | 'verify-email' | 'password'
 
 export default function SignUp() {
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [phoneOtp, setPhoneOtp] = useState('')
   const [emailOtp, setEmailOtp] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [, setCustomerNotFound] = useState(false)
+  const [customerId, setCustomerId] = useState<number | null>(null)
 
   const formatPhoneNumber = (value: string): string => {
     const digits = value.replace(/\D/g, '')
@@ -46,29 +49,33 @@ export default function SignUp() {
     setError('')
     
     try {
-      const response = await fetch('https://app.lrlos.com/webhook/Chargebee/getcustomersusingemail', {
+      const response = await fetch('/api/auth/check-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, keyword: 'signup' })
+        body: JSON.stringify({ email })
       })
       
       const data = await response.json()
       
-      if (Array.isArray(data) && data.length === 0) {
-        setCustomerNotFound(true)
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to check email')
+      }
+      
+      setCustomerId(data.customerId)
+      
+      if (!data.customerFound) {
         setStep('confirm-email')
       } else {
         setStep('phone')
       }
-    } catch {
-      setError('Unable to verify email. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to verify email. Please try again.')
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleConfirmEmail = () => {
-    setCustomerNotFound(false)
     setStep('phone')
   }
 
@@ -85,38 +92,24 @@ export default function SignUp() {
     }
     
     try {
-      await fetch('https://app.lrlos.com/webhook/twilio/sendotp', {
+      const response = await fetch('/api/auth/send-phone-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           phone: cleanPhone, 
-          indicator: 'phone verification sign up' 
+          customerId 
         })
       })
       
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send OTP')
+      }
+      
       setStep('verify-phone')
-    } catch {
-      setError('Unable to send verification code. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const sendEmailOtp = async () => {
-    setIsLoading(true)
-    setError('')
-    
-    try {
-      await fetch('https://app.lrlos.com/webhook/twilio/sendotp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email, 
-          indicator: 'email verification Sign up' 
-        })
-      })
-    } catch {
-      setError('Unable to send email verification code. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to send verification code. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -132,12 +125,45 @@ export default function SignUp() {
     setError('')
     
     try {
+      const response = await fetch('/api/auth/verify-phone-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          phone: getCleanPhoneNumber(phone), 
+          code: phoneOtp,
+          customerId 
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed')
+      }
+      
       await sendEmailOtp()
       setStep('verify-email')
-    } catch {
-      setError('Verification failed. Please try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed. Please try again.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const sendEmailOtp = async () => {
+    try {
+      const response = await fetch('/api/auth/send-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, customerId })
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to send email OTP')
+      }
+    } catch (err) {
+      console.error('Send email OTP error:', err)
     }
   }
 
@@ -151,10 +177,50 @@ export default function SignUp() {
     setError('')
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      alert('Sign up complete! You can now access your account.')
-    } catch {
-      setError('Verification failed. Please try again.')
+      setStep('password')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const completeSignUp = async () => {
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    
+    setIsLoading(true)
+    setError('')
+    
+    try {
+      const response = await fetch('/api/auth/verify-email-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email, 
+          code: emailOtp,
+          customerId,
+          password
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed')
+      }
+      
+      localStorage.setItem('auth_token', data.token)
+      localStorage.setItem('customer', JSON.stringify(data.customer))
+      
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign up failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -179,6 +245,9 @@ export default function SignUp() {
       case 'verify-email':
         await verifyEmailOtp()
         break
+      case 'password':
+        await completeSignUp()
+        break
     }
   }
 
@@ -202,16 +271,21 @@ export default function SignUp() {
     'verify-email': {
       title: 'Enter Email Code',
       subtitle: 'We sent a verification code to your email'
+    },
+    'password': {
+      title: 'Create Password',
+      subtitle: 'Set a password for your account'
     }
   }
 
   const getProgressWidth = () => {
     switch (step) {
-      case 'email': return '20%'
-      case 'confirm-email': return '20%'
-      case 'phone': return '40%'
-      case 'verify-phone': return '70%'
-      case 'verify-email': return '100%'
+      case 'email': return '15%'
+      case 'confirm-email': return '15%'
+      case 'phone': return '35%'
+      case 'verify-phone': return '55%'
+      case 'verify-email': return '75%'
+      case 'password': return '100%'
     }
   }
 
@@ -363,6 +437,29 @@ export default function SignUp() {
                 </div>
               )}
 
+              {step === 'password' && (
+                <div className="grid gap-6">
+                  <Input
+                    label="Password"
+                    type="password"
+                    placeholder="Create a password (min 8 characters)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    tooltip="Must be at least 8 characters"
+                  />
+                  <Input
+                    label="Confirm Password"
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    tooltip="Re-enter your password"
+                  />
+                </div>
+              )}
+
               {error && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -383,7 +480,8 @@ export default function SignUp() {
                   {step === 'email' && 'Continue'}
                   {step === 'phone' && 'Send Verification Code'}
                   {step === 'verify-phone' && 'Verify Phone'}
-                  {step === 'verify-email' && 'Complete Sign Up'}
+                  {step === 'verify-email' && 'Continue'}
+                  {step === 'password' && 'Complete Sign Up'}
                 </Button>
               )}
 
