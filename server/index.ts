@@ -7,7 +7,11 @@ import { storage } from "./storage";
 
 const app = express();
 const PORT = 3001;
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("JWT_SECRET environment variable is required");
+  process.exit(1);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -154,9 +158,9 @@ app.post("/api/auth/send-email-otp", async (req, res) => {
   }
 });
 
-app.post("/api/auth/verify-email-otp", async (req, res) => {
+app.post("/api/auth/verify-email-only", async (req, res) => {
   try {
-    const { email, code, customerId, password } = req.body;
+    const { email, code, customerId } = req.body;
 
     if (!email || !code || !customerId) {
       return res.status(400).json({ error: "Email, code, and customerId are required" });
@@ -169,17 +173,41 @@ app.post("/api/auth/verify-email-otp", async (req, res) => {
     }
 
     await storage.markOtpVerified(otpRecord.id);
+    await storage.updateCustomer(customerId, { emailVerified: true });
 
-    const updateData: any = { 
-      emailVerified: true, 
-      isVerified: true 
-    };
+    res.json({ 
+      success: true, 
+      message: "Email verified"
+    });
+  } catch (error) {
+    console.error("Verify email OTP error:", error);
+    res.status(500).json({ error: "Verification failed" });
+  }
+});
 
-    if (password) {
-      updateData.passwordHash = await bcrypt.hash(password, 10);
+app.post("/api/auth/complete-signup", async (req, res) => {
+  try {
+    const { customerId, password } = req.body;
+
+    if (!customerId || !password) {
+      return res.status(400).json({ error: "CustomerId and password are required" });
     }
 
-    const customer = await storage.updateCustomer(customerId, updateData);
+    const existingCustomer = await storage.getCustomer(customerId);
+    if (!existingCustomer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    if (!existingCustomer.emailVerified) {
+      return res.status(400).json({ error: "Please verify your email first" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const customer = await storage.updateCustomer(customerId, { 
+      passwordHash,
+      isVerified: true 
+    });
+    
     await storage.updateLastLogin(customerId);
 
     const token = jwt.sign(
@@ -188,7 +216,7 @@ app.post("/api/auth/verify-email-otp", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    const session = await storage.createSession({
+    await storage.createSession({
       customerId,
       token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -196,18 +224,21 @@ app.post("/api/auth/verify-email-otp", async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: "Account verified and logged in",
+      message: "Account created and logged in",
       token,
       customer: {
         id: customer?.id,
         email: customer?.email,
         phone: customer?.phone,
         isVerified: customer?.isVerified,
+        lastLoginAt: customer?.lastLoginAt,
+        loginCount: customer?.loginCount,
+        createdAt: customer?.createdAt,
       }
     });
   } catch (error) {
-    console.error("Verify email OTP error:", error);
-    res.status(500).json({ error: "Verification failed" });
+    console.error("Complete signup error:", error);
+    res.status(500).json({ error: "Sign up failed" });
   }
 });
 

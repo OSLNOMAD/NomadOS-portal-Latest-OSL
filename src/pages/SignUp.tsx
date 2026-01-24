@@ -177,7 +177,25 @@ export default function SignUp() {
     setError('')
     
     try {
+      const response = await fetch('/api/auth/verify-email-only', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email, 
+          code: emailOtp,
+          customerId
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Verification failed')
+      }
+      
       setStep('password')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -198,12 +216,10 @@ export default function SignUp() {
     setError('')
     
     try {
-      const response = await fetch('/api/auth/verify-email-otp', {
+      const response = await fetch('/api/auth/complete-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          email, 
-          code: emailOtp,
           customerId,
           password
         })
@@ -212,7 +228,7 @@ export default function SignUp() {
       const data = await response.json()
       
       if (!response.ok) {
-        throw new Error(data.error || 'Verification failed')
+        throw new Error(data.error || 'Sign up failed')
       }
       
       localStorage.setItem('auth_token', data.token)
