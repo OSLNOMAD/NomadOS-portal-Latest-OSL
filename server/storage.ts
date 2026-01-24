@@ -12,6 +12,7 @@ export interface IStorage {
   
   createOtpCode(otp: InsertOtpCode): Promise<OtpCode>;
   getValidOtpCode(target: string, code: string, type: string): Promise<OtpCode | undefined>;
+  verifyOtpCode(target: string, code: string, type: string): Promise<OtpCode | undefined>;
   markOtpVerified(id: number): Promise<void>;
   invalidateOtpCodes(target: string, type: string): Promise<void>;
   
@@ -83,6 +84,14 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return otp || undefined;
+  }
+
+  async verifyOtpCode(target: string, code: string, type: string): Promise<OtpCode | undefined> {
+    const otp = await this.getValidOtpCode(target, code, type);
+    if (otp) {
+      await this.markOtpVerified(otp.id);
+    }
+    return otp;
   }
 
   async markOtpVerified(id: number): Promise<void> {

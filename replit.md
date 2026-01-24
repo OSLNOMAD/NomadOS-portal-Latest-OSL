@@ -40,7 +40,10 @@ src/
 ├── pages/
 │   ├── SignIn.tsx        # Sign-in page (password or OTP)
 │   ├── SignUp.tsx        # Multi-step sign-up flow
-│   └── Dashboard.tsx     # User dashboard with account info
+│   ├── ForgotPassword.tsx # Password reset flow
+│   ├── Dashboard.tsx     # User dashboard with profile dropdown
+│   ├── AccountSettings.tsx # Update name, password, phone
+│   └── ActivityLog.tsx   # Login history and activity
 ├── App.tsx               # Router configuration
 ├── main.tsx              # App entry point
 └── index.css             # Global styles + design tokens
@@ -94,6 +97,10 @@ shared/
 - `POST /api/auth/forgot-password` - Send OTP for password reset
 - `POST /api/auth/verify-forgot-password-otp` - Verify OTP and issue reset token
 - `POST /api/auth/reset-password` - Reset password with valid reset token
+- `POST /api/auth/update-name` - Update user's full name
+- `POST /api/auth/update-password` - Change password (requires current password)
+- `POST /api/auth/request-phone-change` - Send OTP to verify new phone number
+- `POST /api/auth/verify-phone-change` - Verify OTP and update phone number
 - `GET /api/auth/me` - Get current user profile
 - `POST /api/auth/logout` - Invalidate session
 
@@ -127,3 +134,9 @@ npm run db:push  # Push database schema
   - Forgot Password flow with OTP verification (indicator: "Email OTP forgot password")
   - Secure reset token system (15-min expiry, single-use, invalidated on new OTP request)
   - Full name collection during signup and display on dashboard
+- Jan 24, 2026: Account Settings and Activity Log
+  - Profile avatar with dropdown menu (Account Settings, Activity Log, Sign Out)
+  - Account Settings page to update full name, password, and phone number
+  - Phone number change requires OTP verification and checks for duplicate numbers
+  - Activity Log page with login statistics and account history
+  - Removed Activity section from main dashboard (moved to Activity Log page)

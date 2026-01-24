@@ -613,6 +613,166 @@ app.post("/api/auth/reset-password", async (req, res) => {
   }
 });
 
+app.post("/api/auth/update-name", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session || new Date() > session.expiresAt) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    const { fullName } = req.body;
+    if (!fullName || !fullName.trim()) {
+      return res.status(400).json({ error: "Name is required" });
+    }
+
+    await storage.updateCustomer(session.customerId, { fullName: fullName.trim() });
+    res.json({ success: true, message: "Name updated successfully" });
+  } catch (error) {
+    console.error("Update name error:", error);
+    res.status(500).json({ error: "Failed to update name" });
+  }
+});
+
+app.post("/api/auth/update-password", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session || new Date() > session.expiresAt) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current and new passwords are required" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters" });
+    }
+
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer || !customer.passwordHash) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const isValidPassword = await bcrypt.compare(currentPassword, customer.passwordHash);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: "Current password is incorrect" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await storage.updateCustomer(session.customerId, { passwordHash });
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Update password error:", error);
+    res.status(500).json({ error: "Failed to update password" });
+  }
+});
+
+app.post("/api/auth/request-phone-change", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session || new Date() > session.expiresAt) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    const existingCustomer = await storage.getCustomerByPhone(phone);
+    if (existingCustomer && existingCustomer.id !== session.customerId) {
+      return res.status(400).json({ error: "This phone number is already in use by another account" });
+    }
+
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    await storage.invalidateOtpCodes(phone, "phone_change");
+
+    await storage.createOtpCode({
+      customerId: session.customerId,
+      code: otp,
+      type: "phone_change",
+      target: phone,
+      expiresAt,
+    });
+
+    await fetch("https://app.lrlos.com/webhook/twilio/sendotp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: phone,
+        otp,
+        indicator: "Phone verification for account update",
+      }),
+    });
+
+    res.json({ success: true, message: "Verification code sent" });
+  } catch (error) {
+    console.error("Request phone change error:", error);
+    res.status(500).json({ error: "Failed to send verification code" });
+  }
+});
+
+app.post("/api/auth/verify-phone-change", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session || new Date() > session.expiresAt) {
+      return res.status(401).json({ error: "Session expired" });
+    }
+
+    const { phone, code } = req.body;
+    if (!phone || !code) {
+      return res.status(400).json({ error: "Phone and code are required" });
+    }
+
+    const existingCustomer = await storage.getCustomerByPhone(phone);
+    if (existingCustomer && existingCustomer.id !== session.customerId) {
+      return res.status(400).json({ error: "This phone number is already in use by another account" });
+    }
+
+    const otpRecord = await storage.verifyOtpCode(phone, code, "phone_change");
+    if (!otpRecord) {
+      return res.status(400).json({ error: "Invalid or expired verification code" });
+    }
+
+    if (otpRecord.customerId !== session.customerId) {
+      return res.status(400).json({ error: "Verification code does not match your account" });
+    }
+
+    await storage.updateCustomer(session.customerId, { phone });
+    res.json({ success: true, message: "Phone number updated successfully" });
+  } catch (error) {
+    console.error("Verify phone change error:", error);
+    res.status(500).json({ error: "Failed to verify phone number" });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });

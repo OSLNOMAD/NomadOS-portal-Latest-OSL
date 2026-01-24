@@ -3,6 +3,8 @@ import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 import Dashboard from './pages/Dashboard'
 import ForgotPassword from './pages/ForgotPassword'
+import AccountSettings from './pages/AccountSettings'
+import ActivityLog from './pages/ActivityLog'
 
 function App() {
   return (
@@ -12,6 +14,8 @@ function App() {
       <Route path="/signup" element={<SignUp />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/account" element={<AccountSettings />} />
+      <Route path="/activity" element={<ActivityLog />} />
     </Routes>
   )
 }
