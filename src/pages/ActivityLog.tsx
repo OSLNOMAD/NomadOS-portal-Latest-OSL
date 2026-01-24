@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
 interface Customer {
@@ -14,6 +14,8 @@ export default function ActivityLog() {
   const navigate = useNavigate()
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -48,6 +50,45 @@ export default function ActivityLog() {
 
     fetchProfile()
   }, [navigate])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('auth_token')
+    
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('customer')
+    navigate('/signin')
+  }
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'U'
+    const parts = name.split(' ')
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Never'
@@ -86,6 +127,49 @@ export default function ActivityLog() {
       <header className="dashboard-header">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <img src="/logo.svg" alt="Nomad Internet" className="h-10" />
+          
+          <div className="relative" ref={dropdownRef}>
+            <button 
+              onClick={() => setShowDropdown(!showDropdown)}
+              className="profile-avatar"
+              aria-label="Account menu"
+            >
+              {getInitials(customer?.fullName)}
+            </button>
+            
+            {showDropdown && (
+              <div className="profile-dropdown">
+                <div className="dropdown-header">
+                  <p className="dropdown-name">{customer?.fullName || 'User'}</p>
+                  <p className="dropdown-email">{customer?.email}</p>
+                </div>
+                <div className="dropdown-divider" />
+                <Link to="/dashboard" className="dropdown-item" onClick={() => setShowDropdown(false)}>
+                  <svg className="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9,22 9,12 15,12 15,22" />
+                  </svg>
+                  Dashboard
+                </Link>
+                <Link to="/account" className="dropdown-item" onClick={() => setShowDropdown(false)}>
+                  <svg className="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  Account Settings
+                </Link>
+                <div className="dropdown-divider" />
+                <button onClick={handleLogout} className="dropdown-item dropdown-item-danger">
+                  <svg className="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16,17 21,12 16,7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
