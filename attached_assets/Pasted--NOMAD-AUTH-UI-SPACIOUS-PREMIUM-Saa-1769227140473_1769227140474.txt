@@ -1,51 +1,83 @@
-@import "tailwindcss";
-
 /* =========================================================
    NOMAD AUTH UI (SPACIOUS, PREMIUM SaaS AESTHETIC)
+   ---------------------------------------------------------
+   Goal:
+   - Green gradient brand panel on the left
+   - Clean light panel on the right
+   - Centered frosted “card” with soft shadow
+   - Big typography + generous spacing (no cramped UI)
+   - Inputs with icons, soft borders, good focus states
+   - Large gradient primary button
 ========================================================= */
+
 
 /* =========================
    1) Design Tokens (Theme)
+   -------------------------
+   Edit these once and the whole UI shifts consistently.
 ========================= */
 :root {
-  --bg: #f6faf9;
-  --card: rgba(255, 255, 255, 0.78);
-  --text: #0f172a;
-  --muted: #6b7280;
-  --border: rgba(15, 23, 42, 0.10);
-  --border-soft: rgba(15, 23, 42, 0.06);
-  --shadow: 0 22px 60px rgba(15, 23, 42, 0.10);
-  --g-800: #0b6f55;
-  --g-700: #0a7e60;
-  --g-600: #0e8f6c;
-  --g-500: #10a37f;
-  --focus: rgba(16, 163, 127, 0.22);
+  /* Base backgrounds */
+  --bg: #f6faf9;                          /* Right-side page background */
+  --card: rgba(255, 255, 255, 0.78);      /* Semi-transparent card for frosted effect */
+
+  /* Text colors */
+  --text: #0f172a;                        /* Primary text (dark slate) */
+  --muted: #6b7280;                       /* Secondary text (gray) */
+
+  /* Borders + shadows */
+  --border: rgba(15, 23, 42, 0.10);       /* Input + card borders */
+  --border-soft: rgba(15, 23, 42, 0.06);  /* Subtle borders for small elements */
+  --shadow: 0 22px 60px rgba(15, 23, 42, 0.10); /* Card elevation */
+
+  /* Brand greens */
+  --g-800: #0b6f55;                       /* Deep green */
+  --g-700: #0a7e60;                       /* Main deep gradient */
+  --g-600: #0e8f6c;                       /* Mid green */
+  --g-500: #10a37f;                       /* Primary green */
+
+  /* Focus ring */
+  --focus: rgba(16, 163, 127, 0.22);      /* Soft green glow for focus */
+
+  /* Radius */
   --r-xl: 22px;
   --r-lg: 16px;
   --r-md: 12px;
+
+  /* Spacing scale */
   --s-1: 8px;
   --s-2: 12px;
   --s-3: 16px;
   --s-4: 24px;
   --s-5: 32px;
   --s-6: 44px;
-  --input-h: 52px;
+
+  /* Form sizing */
+  --input-h: 52px;                        /* Comfortable, tap-friendly height */
 }
+
 
 /* =========================
    2) Minimal Reset
+   -------------------------
+   Prevent browser defaults from causing layout chaos.
 ========================= */
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
 body {
+  margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
   color: var(--text);
   background: var(--bg);
 }
-#root { min-height: 100vh; }
+
 
 /* =========================
    3) Core Layout (2 Columns)
+   -------------------------
+   Desktop: left brand panel + right auth panel
 ========================= */
 .auth-layout {
   min-height: 100vh;
@@ -53,24 +85,33 @@ body {
   grid-template-columns: 44% 56%;
 }
 
+
 /* =========================
    4) Left Panel (Brand)
+   -------------------------
+   This creates the gradient wall with subtle depth.
 ========================= */
 .auth-left {
   position: relative;
   padding: clamp(32px, 5vw, 64px);
   display: flex;
-  align-items: center;
+  align-items: center;    /* vertically centers content */
   justify-content: center;
   color: #fff;
+
+  /* Layered background:
+     - radial highlights to simulate depth
+     - base linear gradient for brand tone */
   background:
     radial-gradient(1200px 900px at 20% 20%, rgba(255,255,255,0.18), transparent 60%),
     radial-gradient(900px 700px at 75% 75%, rgba(0,0,0,0.14), transparent 55%),
     linear-gradient(135deg, var(--g-500), var(--g-700) 55%, var(--g-800));
 }
 
+/* Prevents brand content from stretching too wide */
 .brand-block { max-width: 520px; }
 
+/* Large hero text */
 .brand-title {
   margin: 0 0 var(--s-3);
   font-size: clamp(40px, 4.2vw, 58px);
@@ -79,6 +120,7 @@ body {
   font-weight: 900;
 }
 
+/* Strong subtitle (still secondary to title) */
 .brand-subtitle {
   margin: 0 0 var(--s-4);
   font-size: clamp(22px, 2.4vw, 32px);
@@ -87,6 +129,7 @@ body {
   opacity: 0.96;
 }
 
+/* Supporting copy should be easy to read, not dense */
 .brand-copy {
   margin: 0 0 var(--s-6);
   max-width: 46ch;
@@ -95,17 +138,20 @@ body {
   opacity: 0.90;
 }
 
+/* Stats row: equal columns, good spacing */
 .brand-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--s-4);
 }
 
+/* Soft top divider for each stat */
 .stat {
   padding-top: var(--s-4);
   border-top: 1px solid rgba(255,255,255,0.24);
 }
 
+/* Big stat number */
 .stat-value {
   font-size: 36px;
   line-height: 1.1;
@@ -113,6 +159,7 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Small uppercase label */
 .stat-label {
   margin-top: 6px;
   font-size: 12px;
@@ -121,23 +168,31 @@ body {
   opacity: 0.88;
 }
 
+
 /* =========================
    5) Right Panel (Auth Side)
+   -------------------------
+   Centers the card and adds subtle background glow.
 ========================= */
 .auth-right {
   display: grid;
-  place-items: center;
+  place-items: center;   /* centers card both horizontally and vertically */
   padding: clamp(24px, 4vw, 64px);
+
+  /* Subtle ambient blobs so it doesn't look flat */
   background:
     radial-gradient(900px 600px at 80% 30%, rgba(16,163,127,0.10), transparent 55%),
     radial-gradient(700px 500px at 20% 80%, rgba(15,23,42,0.06), transparent 55%),
     var(--bg);
 }
 
+/* Frosted card container */
 .auth-card {
   width: min(560px, 100%);
   padding: clamp(28px, 3vw, 48px);
   border-radius: var(--r-xl);
+
+  /* Frosted glass effect */
   background: var(--card);
   border: 1px solid rgba(255,255,255,0.60);
   box-shadow: var(--shadow);
@@ -145,16 +200,14 @@ body {
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Center the logo */
 .auth-logo {
   display: flex;
   justify-content: center;
   margin-bottom: var(--s-4);
 }
 
-.auth-logo img {
-  height: 48px;
-}
-
+/* Main title on card */
 .auth-title {
   margin: 0 0 var(--s-2);
   text-align: center;
@@ -162,9 +215,9 @@ body {
   line-height: 1.1;
   font-weight: 900;
   letter-spacing: -0.02em;
-  color: var(--text);
 }
 
+/* Subtitle under title */
 .auth-subtitle {
   margin: 0 0 var(--s-6);
   text-align: center;
@@ -173,31 +226,38 @@ body {
   font-size: 15px;
 }
 
+
 /* =========================
    6) Form Layout + Fields
+   -------------------------
+   Uses large vertical gaps to avoid cramped UI.
 ========================= */
 .auth-form {
   display: grid;
-  gap: var(--s-5);
+  gap: var(--s-5);       /* space between form blocks */
 }
 
+/* Each field group: label + input */
 .form-group {
   display: grid;
   gap: var(--s-2);
 }
 
+/* Labels: clear but not huge */
 .form-label {
   font-size: 14px;
   font-weight: 800;
   color: rgba(15, 23, 42, 0.82);
 }
 
+/* Wrapper for icons and actions inside inputs */
 .input-wrap { position: relative; }
 
+/* Primary input style */
 .form-input {
   width: 100%;
   height: var(--input-h);
-  padding: 0 16px;
+  padding: 0 44px 0 44px;     /* left icon + right action spacing */
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.92);
@@ -207,33 +267,28 @@ body {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.form-input.has-icon {
-  padding-left: 44px;
-}
-
-.form-input.has-action {
-  padding-right: 50px;
-}
-
+/* Placeholder: subtle */
 .form-input::placeholder {
   color: rgba(107,114,128,0.85);
 }
 
+/* Focus state: soft green ring, modern feel */
 .form-input:focus {
   border-color: rgba(16,163,127,0.55);
   box-shadow: 0 0 0 6px var(--focus);
 }
 
+/* Left icon inside input */
 .input-icon {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0.55;
-  pointer-events: none;
-  color: var(--muted);
+  pointer-events: none;       /* icon doesn't intercept clicks */
 }
 
+/* Right action icon (like password eye toggle) */
 .input-action {
   position: absolute;
   right: 10px;
@@ -245,43 +300,45 @@ body {
   border: 1px solid var(--border-soft);
   background: rgba(255,255,255,0.72);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
 }
 
 .input-action:hover {
   filter: brightness(0.98);
 }
 
+
 /* =========================
    7) Remember / Forgot Row
+   -------------------------
+   Keeps it balanced and aligned.
 ========================= */
 .form-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
+
+  /* Slight pull-up so it sits close to inputs
+     without feeling cramped */
   margin-top: -10px;
 }
 
+/* Checkbox styling */
 .checkbox {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-size: 14px;
   color: rgba(15,23,42,0.75);
-  cursor: pointer;
 }
 
 .checkbox input {
   width: 18px;
   height: 18px;
   accent-color: var(--g-500);
-  cursor: pointer;
 }
 
+/* Links: bold but not loud */
 .link {
   font-size: 14px;
   font-weight: 800;
@@ -291,8 +348,11 @@ body {
 
 .link:hover { text-decoration: underline; }
 
+
 /* =========================
    8) Primary Button
+   -------------------------
+   Big CTA, gradient, strong presence.
 ========================= */
 .btn-primary {
   height: 54px;
@@ -300,49 +360,32 @@ body {
   border: none;
   border-radius: 14px;
   cursor: pointer;
+
   color: #fff;
   font-size: 16px;
   font-weight: 900;
   letter-spacing: 0.01em;
+
   background: linear-gradient(135deg, var(--g-500), var(--g-700));
   box-shadow: 0 16px 40px rgba(15,23,42,0.14);
   transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
 }
 
-.btn-primary:hover:not(:disabled) {
+.btn-primary:hover {
   filter: brightness(1.03);
   transform: translateY(-1px);
   box-shadow: 0 20px 50px rgba(15,23,42,0.16);
 }
 
-.btn-primary:active:not(:disabled) {
+.btn-primary:active {
   transform: translateY(0px);
 }
 
-.btn-primary:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  height: 54px;
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  cursor: pointer;
-  color: var(--text);
-  font-size: 16px;
-  font-weight: 800;
-  background: rgba(255,255,255,0.72);
-  transition: background 120ms ease;
-}
-
-.btn-secondary:hover {
-  background: rgba(255,255,255,0.92);
-}
 
 /* =========================
    9) Footer + Legal
+   -------------------------
+   Secondary content should be lower emphasis.
 ========================= */
 .auth-footer {
   margin-top: var(--s-5);
@@ -367,226 +410,53 @@ body {
   color: rgba(100,116,139,0.90);
 }
 
+
 /* =========================
    10) Accessibility Focus
+   -------------------------
+   Better keyboard navigation experience.
 ========================= */
 :focus-visible {
   outline: 3px solid rgba(16,163,127,0.40);
   outline-offset: 3px;
 }
 
+
 /* =========================
    11) Responsive Rules
+   -------------------------
+   Tablet/mobile: stack panels and keep form readable.
 ========================= */
 @media (max-width: 980px) {
   .auth-layout { grid-template-columns: 1fr; }
+
+  /* Brand panel becomes a top section */
   .auth-left {
     min-height: 260px;
     padding: 28px;
     align-items: flex-end;
   }
+
+  /* Stats tighten for smaller width */
   .brand-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--s-2);
   }
+
   .auth-right { padding: 24px; }
 }
 
 @media (max-width: 520px) {
+  /* Stats stack vertically for readability */
   .brand-stats { grid-template-columns: 1fr; }
+
+  /* Remember/forgot stacks nicely */
   .form-row {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--s-2);
     margin-top: 0;
   }
+
   .btn-primary { height: 52px; }
-}
-
-/* =========================
-   12) Progress Bar
-========================= */
-.progress-bar {
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(15, 23, 42, 0.08);
-  overflow: hidden;
-  margin-bottom: var(--s-4);
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 4px;
-  background: linear-gradient(135deg, var(--g-500), var(--g-700));
-  transition: width 0.5s ease;
-}
-
-/* =========================
-   13) Error & Warning Messages
-========================= */
-.error-message {
-  padding: var(--s-3);
-  border-radius: var(--r-md);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  color: #dc2626;
-  font-size: 14px;
-}
-
-.warning-message {
-  padding: var(--s-3);
-  border-radius: var(--r-md);
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.25);
-  color: #92400e;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-/* =========================
-   14) Dashboard Styles
-========================= */
-.dashboard-layout {
-  min-height: 100vh;
-  background:
-    radial-gradient(900px 600px at 80% 30%, rgba(16,163,127,0.08), transparent 55%),
-    radial-gradient(700px 500px at 20% 80%, rgba(15,23,42,0.04), transparent 55%),
-    var(--bg);
-}
-
-.dashboard-header {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-}
-
-.dashboard-card {
-  padding: clamp(24px, 3vw, 32px);
-  border-radius: var(--r-xl);
-  background: var(--card);
-  border: 1px solid rgba(255,255,255,0.55);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(12px);
-}
-
-.dashboard-title {
-  font-size: clamp(32px, 4vw, 40px);
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  line-height: 1.1;
-}
-
-.dashboard-subtitle {
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1.5;
-}
-
-.card-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: var(--s-4);
-}
-
-.card-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.card-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-  margin-top: 4px;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.status-verified {
-  background: rgba(16, 163, 127, 0.12);
-  color: var(--g-500);
-}
-
-.status-pending {
-  background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
-}
-
-.cta-card {
-  padding: clamp(24px, 3vw, 32px);
-  border-radius: var(--r-xl);
-  background: linear-gradient(135deg, var(--g-500), var(--g-700));
-  box-shadow: 0 20px 60px rgba(16, 163, 127, 0.2);
-}
-
-.cta-title {
-  font-size: 24px;
-  font-weight: 800;
-  color: #fff;
-  margin-bottom: var(--s-2);
-}
-
-.cta-text {
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 15px;
-}
-
-.cta-button {
-  padding: 12px 24px;
-  border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--g-500);
-  font-weight: 800;
-  font-size: 14px;
-  border: none;
-  cursor: pointer;
-  transition: transform 120ms ease;
-}
-
-.cta-button:hover {
-  transform: translateY(-2px);
-}
-
-.sign-out-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.sign-out-btn:hover {
-  background: rgba(15, 23, 42, 0.05);
-}
-
-/* =========================
-   15) Spinner
-========================= */
-.spinner {
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }

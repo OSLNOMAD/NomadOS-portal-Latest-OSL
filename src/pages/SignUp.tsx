@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -307,215 +306,146 @@ export default function SignUp() {
 
   return (
     <AuthLayout>
-      <div className="mb-6">
-        <div 
-          className="h-2 rounded-full overflow-hidden"
-          style={{ background: 'rgba(15, 23, 42, 0.08)' }}
-        >
-          <motion.div 
-            className="h-full rounded-full"
-            style={{ background: 'linear-gradient(135deg, #10a37f, #0a8f6a)' }}
-            initial={{ width: 0 }}
-            animate={{ width: getProgressWidth() }}
-            transition={{ duration: 0.5 }}
-          />
-        </div>
+      <div className="progress-bar">
+        <div className="progress-fill" style={{ width: getProgressWidth() }} />
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="text-center mb-10">
-            <h1 
-              className="font-extrabold mb-3"
-              style={{ fontSize: '34px', lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0f172a' }}
-            >
-              {stepConfig[step].title}
-            </h1>
-            <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-              {stepConfig[step].subtitle}
+      <h1 className="auth-title">{stepConfig[step].title}</h1>
+      <p className="auth-subtitle">{stepConfig[step].subtitle}</p>
+
+      <form onSubmit={handleSubmit} className="auth-form">
+        {step === 'email' && (
+          <Input
+            label="Email Address"
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            tooltip="Use the email you used when signing up for Nomad Internet"
+          />
+        )}
+
+        {step === 'confirm-email' && (
+          <>
+            <div className="warning-message">
+              The email <strong>{email}</strong> was not found in our system. 
+              If this is correct, we'll proceed with phone verification.
+            </div>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep('email')}
+                className="flex-1"
+              >
+                Use Different Email
+              </Button>
+              <Button type="submit" className="flex-1">
+                Continue Anyway
+              </Button>
+            </div>
+          </>
+        )}
+
+        {step === 'phone' && (
+          <Input
+            label="Phone Number"
+            type="tel"
+            placeholder="+1 (512) 299-9278"
+            value={phone}
+            onChange={handlePhoneChange}
+            required
+            tooltip="US phone numbers only (+1 format)"
+          />
+        )}
+
+        {step === 'verify-phone' && (
+          <>
+            <Input
+              label="Verification Code"
+              type="text"
+              placeholder="Enter 6-digit code"
+              value={phoneOtp}
+              onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              required
+              tooltip="Check your phone for the SMS code"
+              maxLength={6}
+            />
+            <p className="auth-footer" style={{ marginTop: 0 }}>
+              Didn't receive the code?{' '}
+              <button type="button" onClick={() => sendPhoneOtp()} className="link">
+                Resend
+              </button>
             </p>
-          </div>
+          </>
+        )}
 
-          <form onSubmit={handleSubmit} className="grid gap-8">
-              {step === 'email' && (
-                <Input
-                  label="Email Address"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  tooltip="Use the email you used when signing up for Nomad Internet"
-                />
-              )}
+        {step === 'verify-email' && (
+          <>
+            <Input
+              label="Email Verification Code"
+              type="text"
+              placeholder="Enter 6-digit code"
+              value={emailOtp}
+              onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              required
+              tooltip="Check your email for the verification code"
+              maxLength={6}
+            />
+            <p className="auth-footer" style={{ marginTop: 0 }}>
+              Didn't receive the code?{' '}
+              <button type="button" onClick={() => sendEmailOtp()} className="link">
+                Resend
+              </button>
+            </p>
+          </>
+        )}
 
-              {step === 'confirm-email' && (
-                <div className="grid gap-6">
-                  <div 
-                    className="p-5 rounded-xl text-sm leading-relaxed"
-                    style={{ 
-                      background: 'rgba(245, 158, 11, 0.08)', 
-                      border: '1px solid rgba(245, 158, 11, 0.25)',
-                      color: '#92400e'
-                    }}
-                  >
-                    The email <strong>{email}</strong> was not found in our system. 
-                    If this is correct, we'll proceed with phone verification.
-                  </div>
-                  <div className="flex gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setStep('email')}
-                      className="flex-1 font-bold transition-colors hover:bg-gray-50"
-                      style={{ 
-                        height: '54px',
-                        borderRadius: '14px',
-                        border: '1px solid rgba(15, 23, 42, 0.15)',
-                        color: '#0f172a'
-                      }}
-                    >
-                      Use Different Email
-                    </button>
-                    <Button type="submit" className="flex-1">
-                      Continue Anyway
-                    </Button>
-                  </div>
-                </div>
-              )}
+        {step === 'password' && (
+          <>
+            <Input
+              label="Password"
+              type="password"
+              placeholder="Create a password (min 8 characters)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              tooltip="Must be at least 8 characters"
+            />
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="Confirm your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              tooltip="Re-enter your password"
+            />
+          </>
+        )}
 
-              {step === 'phone' && (
-                <Input
-                  label="Phone Number"
-                  type="tel"
-                  placeholder="+1 (512) 299-9278"
-                  value={phone}
-                  onChange={handlePhoneChange}
-                  required
-                  tooltip="US phone numbers only (+1 format)"
-                />
-              )}
+        {error && (
+          <div className="error-message">{error}</div>
+        )}
 
-              {step === 'verify-phone' && (
-                <div className="grid gap-6">
-                  <Input
-                    label="Verification Code"
-                    type="text"
-                    placeholder="Enter 6-digit code"
-                    value={phoneOtp}
-                    onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    required
-                    tooltip="Check your phone for the SMS code"
-                    maxLength={6}
-                  />
-                  <p className="text-sm text-center" style={{ color: '#64748b' }}>
-                    Didn't receive the code?{' '}
-                    <button 
-                      type="button"
-                      onClick={() => sendPhoneOtp()}
-                      className="font-bold hover:underline"
-                      style={{ color: '#0a8f6a' }}
-                    >
-                      Resend
-                    </button>
-                  </p>
-                </div>
-              )}
+        {step !== 'confirm-email' && (
+          <Button type="submit" isLoading={isLoading}>
+            {step === 'email' && 'Continue'}
+            {step === 'phone' && 'Send Verification Code'}
+            {step === 'verify-phone' && 'Verify Phone'}
+            {step === 'verify-email' && 'Continue'}
+            {step === 'password' && 'Complete Sign Up'}
+          </Button>
+        )}
 
-              {step === 'verify-email' && (
-                <div className="grid gap-6">
-                  <Input
-                    label="Email Verification Code"
-                    type="text"
-                    placeholder="Enter 6-digit code"
-                    value={emailOtp}
-                    onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    required
-                    tooltip="Check your email for the verification code"
-                    maxLength={6}
-                  />
-                  <p className="text-sm text-center" style={{ color: '#64748b' }}>
-                    Didn't receive the code?{' '}
-                    <button 
-                      type="button"
-                      onClick={() => sendEmailOtp()}
-                      className="font-bold hover:underline"
-                      style={{ color: '#0a8f6a' }}
-                    >
-                      Resend
-                    </button>
-                  </p>
-                </div>
-              )}
-
-              {step === 'password' && (
-                <div className="grid gap-6">
-                  <Input
-                    label="Password"
-                    type="password"
-                    placeholder="Create a password (min 8 characters)"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    tooltip="Must be at least 8 characters"
-                  />
-                  <Input
-                    label="Confirm Password"
-                    type="password"
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    tooltip="Re-enter your password"
-                  />
-                </div>
-              )}
-
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="p-4 rounded-xl text-sm"
-                  style={{ 
-                    background: 'rgba(239, 68, 68, 0.08)', 
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                    color: '#dc2626'
-                  }}
-                >
-                  {error}
-                </motion.div>
-              )}
-
-              {step !== 'confirm-email' && (
-                <Button type="submit" isLoading={isLoading}>
-                  {step === 'email' && 'Continue'}
-                  {step === 'phone' && 'Send Verification Code'}
-                  {step === 'verify-phone' && 'Verify Phone'}
-                  {step === 'verify-email' && 'Continue'}
-                  {step === 'password' && 'Complete Sign Up'}
-                </Button>
-              )}
-
-              {step === 'email' && (
-                <p className="text-center text-sm" style={{ color: '#64748b', lineHeight: 1.6 }}>
-                  Already have an account?{' '}
-                  <Link 
-                    to="/signin" 
-                    className="font-extrabold hover:underline"
-                    style={{ color: '#0a8f6a' }}
-                  >
-                    Sign in
-                  </Link>
-                </p>
-              )}
-            </form>
-          </motion.div>
-        </AnimatePresence>
+        {step === 'email' && (
+          <p className="auth-footer" style={{ marginTop: 0 }}>
+            Already have an account?{' '}
+            <Link to="/signin">Sign in</Link>
+          </p>
+        )}
+      </form>
     </AuthLayout>
   )
 }

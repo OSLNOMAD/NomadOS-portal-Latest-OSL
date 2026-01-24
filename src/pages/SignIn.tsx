@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import AuthLayout from '../components/AuthLayout'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -111,36 +110,16 @@ export default function SignIn() {
 
   return (
     <AuthLayout>
-      <div className="text-center mb-10">
-        <motion.h1 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="font-extrabold mb-3"
-          style={{ fontSize: '34px', lineHeight: 1.1, letterSpacing: '-0.02em', color: '#0f172a' }}
-        >
-          {step === 'otp-sent' ? 'Enter Verification Code' : 'Welcome Back'}
-        </motion.h1>
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="leading-relaxed"
-          style={{ color: '#64748b', lineHeight: 1.6 }}
-        >
-          {step === 'otp-sent' 
-            ? 'We sent a code to your email' 
-            : 'Sign in to access your Nomad Internet account'}
-        </motion.p>
-      </div>
+      <h1 className="auth-title">
+        {step === 'otp-sent' ? 'Enter Verification Code' : 'Welcome Back'}
+      </h1>
+      <p className="auth-subtitle">
+        {step === 'otp-sent' 
+          ? 'We sent a code to your email' 
+          : 'Sign in to access your Nomad Internet account'}
+      </p>
 
-      <motion.form 
-        onSubmit={handleSubmit}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="grid gap-8"
-      >
+      <form onSubmit={handleSubmit} className="auth-form">
         {step === 'credentials' && (
           <>
             <Input
@@ -181,37 +160,19 @@ export default function SignIn() {
         )}
 
         {error && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="p-4 rounded-xl text-sm"
-            style={{ 
-              background: 'rgba(239, 68, 68, 0.08)', 
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              color: '#dc2626'
-            }}
-          >
-            {error}
-          </motion.div>
+          <div className="error-message">{error}</div>
         )}
 
         {step === 'credentials' && method === 'password' && (
-          <div className="flex items-center justify-between text-sm" style={{ marginTop: '-6px' }}>
-            <label className="flex items-center gap-2.5 cursor-pointer group">
-              <input 
-                type="checkbox" 
-                className="w-[18px] h-[18px] rounded cursor-pointer"
-                style={{ accentColor: '#10a37f' }}
-              />
-              <span style={{ color: 'rgba(15, 23, 42, 0.78)' }}>
-                Remember me
-              </span>
+          <div className="form-row">
+            <label className="checkbox">
+              <input type="checkbox" />
+              <span>Remember me</span>
             </label>
             <button 
               type="button"
               onClick={() => setMethod('otp')}
-              className="font-bold hover:underline"
-              style={{ color: '#0a8f6a' }}
+              className="link"
             >
               Use OTP instead
             </button>
@@ -219,12 +180,11 @@ export default function SignIn() {
         )}
 
         {step === 'credentials' && method === 'otp' && (
-          <div className="flex justify-end" style={{ marginTop: '-6px' }}>
+          <div className="form-row" style={{ justifyContent: 'flex-end' }}>
             <button 
               type="button"
               onClick={() => setMethod('password')}
-              className="text-sm font-bold hover:underline"
-              style={{ color: '#0a8f6a' }}
+              className="link"
             >
               Use password instead
             </button>
@@ -236,30 +196,19 @@ export default function SignIn() {
         </Button>
 
         {step === 'otp-sent' && (
-          <p className="text-sm text-center" style={{ color: '#64748b' }}>
+          <p className="auth-footer" style={{ marginTop: 0 }}>
             Didn't receive the code?{' '}
-            <button 
-              type="button"
-              onClick={handleSendOtp}
-              className="font-bold hover:underline"
-              style={{ color: '#0a8f6a' }}
-            >
+            <button type="button" onClick={handleSendOtp} className="link">
               Resend
             </button>
           </p>
         )}
 
-        <p className="text-center text-sm" style={{ color: '#64748b', lineHeight: 1.6 }}>
+        <p className="auth-footer" style={{ marginTop: 0 }}>
           Don't have an account?{' '}
-          <Link 
-            to="/signup" 
-            className="font-extrabold hover:underline"
-            style={{ color: '#0a8f6a' }}
-          >
-            Sign up
-          </Link>
+          <Link to="/signup">Sign up</Link>
         </p>
-      </motion.form>
+      </form>
     </AuthLayout>
   )
 }
