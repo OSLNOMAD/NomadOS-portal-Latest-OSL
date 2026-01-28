@@ -867,7 +867,7 @@ export default function Dashboard() {
         )}
       </main>
       
-      {authToken && <ChatWidget token={authToken} />}
+      {authToken && <ChatWidget token={authToken} dataLoaded={!isLoadingData} />}
     </div>
   )
 }

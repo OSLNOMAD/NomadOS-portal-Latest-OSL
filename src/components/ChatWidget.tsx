@@ -8,9 +8,10 @@ interface ChatMessage {
 
 interface ChatWidgetProps {
   token: string;
+  dataLoaded?: boolean;
 }
 
-export function ChatWidget({ token }: ChatWidgetProps) {
+export function ChatWidget({ token, dataLoaded = false }: ChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -77,6 +78,10 @@ export function ChatWidget({ token }: ChatWidgetProps) {
       sendMessage();
     }
   };
+
+  if (!dataLoaded) {
+    return null;
+  }
 
   return (
     <>
