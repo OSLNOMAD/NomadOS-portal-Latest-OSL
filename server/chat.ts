@@ -8,274 +8,28 @@ interface ChatMessage {
   content: string;
 }
 
-function formatUnixTimestamp(ts: number | string | undefined | null): string {
-  if (!ts) return "N/A";
-  const num = typeof ts === "string" ? parseInt(ts) : ts;
-  if (isNaN(num) || num === 0) return "N/A";
-  return new Date(num * 1000).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function formatISODate(isoString: string | undefined | null): string {
-  if (!isoString) return "N/A";
-  try {
-    return new Date(isoString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return isoString;
-  }
-}
-
-function centsToDollars(cents: number | undefined | null): string {
-  if (cents === undefined || cents === null) return "$0.00";
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function toDollars(amount: number | string | undefined | null): string {
-  if (amount === undefined || amount === null) return "$0.00";
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return `$${num.toFixed(2)}`;
-}
-
 function formatAccountContext(data: CustomerFullData, email: string): string {
   const sections: string[] = [];
 
-  sections.push(`=== CUSTOMER EMAIL: ${email} ===`);
+  sections.push(`CUSTOMER EMAIL: ${email}`);
+  sections.push("");
 
-  sections.push(`\n${"=".repeat(60)}`);
-  sections.push(`SOURCE: CHARGEBEE (Billing & Subscriptions)`);
-  sections.push(`${"=".repeat(60)}`);
+  sections.push("=== CHARGEBEE DATA ===");
+  sections.push("(Billing system: customers, subscriptions, invoices, transactions, payment methods)");
+  sections.push("NOTE: All monetary amounts are already in DOLLARS (e.g., 99.95 means $99.95).");
+  sections.push("NOTE: All dates are ISO strings (e.g., '2026-01-05T02:59:32.000Z').");
+  sections.push(JSON.stringify(data.chargebee, null, 2));
+  sections.push("");
 
-  if (data.chargebee.customers.length === 0) {
-    sections.push("No Chargebee customer records found for this email.");
-  } else {
-    sections.push(`Total Customers: ${data.chargebee.customers.length}`);
-    sections.push(`Total Subscriptions: ${data.chargebee.totalSubscriptions}`);
-    sections.push(`Total Invoices: ${data.chargebee.totalInvoices}`);
-    sections.push(`Total Amount Due: ${centsToDollars(data.chargebee.totalDue)}`);
+  sections.push("=== ORDERS DATA (Shopify + Shipstation) ===");
+  sections.push("(Customer orders, line items, shipping addresses, tracking info, IMEI/ICCID from Shipstation custom fields)");
+  sections.push("NOTE: Order totals are already in dollars - do NOT divide by 100.");
+  sections.push(JSON.stringify(data.orders, null, 2));
+  sections.push("");
 
-    data.chargebee.customers.forEach((customer, custIdx) => {
-      sections.push(`\n--- CHARGEBEE CUSTOMER #${custIdx + 1} ---`);
-      sections.push(`Customer ID: ${customer.id}`);
-      sections.push(`Name: ${customer.firstName || ""} ${customer.lastName || ""}`);
-      sections.push(`Email: ${customer.email || email}`);
-      sections.push(`Phone: ${customer.phone || "N/A"}`);
-      sections.push(`Created: ${formatUnixTimestamp(customer.createdAt)}`);
-      sections.push(`Auto Collection: ${customer.autoCollection || "N/A"}`);
-      sections.push(`Promotional Credits: ${centsToDollars(customer.promotionalCredits)}`);
-      sections.push(`Refundable Credits: ${centsToDollars(customer.refundableCredits)}`);
-      sections.push(`Excess Payments: ${centsToDollars(customer.excessPayments)}`);
-      sections.push(`Unbilled Charges: ${centsToDollars(customer.unbilledCharges)}`);
-
-      if (customer.billingAddress) {
-        const ba = customer.billingAddress;
-        sections.push(`Billing Address: ${ba.line1 || ""} ${ba.line2 || ""}, ${ba.city || ""}, ${ba.state || ""} ${ba.zip || ""} ${ba.country || ""}`);
-      }
-
-      sections.push(`\n  SUBSCRIPTIONS (${customer.subscriptions.length}):`);
-      if (customer.subscriptions.length === 0) {
-        sections.push("    No subscriptions found.");
-      } else {
-        customer.subscriptions.forEach((sub, subIdx) => {
-          sections.push(`\n  [Subscription ${subIdx + 1}]`);
-          sections.push(`    Subscription ID: ${sub.id}`);
-          sections.push(`    Plan ID: ${sub.planId}`);
-          sections.push(`    Status: ${sub.status}`);
-          sections.push(`    Plan Amount: ${centsToDollars(sub.planAmount)} per ${sub.billingPeriodUnit || "month"}`);
-          sections.push(`    Billing Period: ${sub.billingPeriod || 1} ${sub.billingPeriodUnit || "month"}(s)`);
-          sections.push(`    Created: ${formatUnixTimestamp(sub.createdAt)}`);
-          sections.push(`    Started: ${formatUnixTimestamp(sub.startedAt)}`);
-          sections.push(`    Activated: ${formatUnixTimestamp(sub.activatedAt)}`);
-          sections.push(`    Current Term Start: ${formatUnixTimestamp(sub.currentTermStart)}`);
-          sections.push(`    Current Term End: ${formatUnixTimestamp(sub.currentTermEnd)}`);
-          sections.push(`    Next Billing: ${formatUnixTimestamp(sub.nextBillingAt)}`);
-          sections.push(`    Cancelled At: ${formatUnixTimestamp(sub.cancelledAt)}`);
-          sections.push(`    Cancel Reason: ${sub.cancelReason || "N/A"}`);
-          sections.push(`    Due Invoices Count: ${sub.dueInvoicesCount ?? 0}`);
-          sections.push(`    Due Since: ${formatUnixTimestamp(sub.dueSince)}`);
-          sections.push(`    Total Dues: ${centsToDollars(sub.totalDues)}`);
-          sections.push(`    MRR (Monthly Recurring Revenue): ${centsToDollars(sub.mrr)}`);
-          sections.push(`    ICCID (SIM ID): ${sub.iccid || "N/A"}`);
-          sections.push(`    IMEI (Device ID): ${sub.imei || "N/A"}`);
-          sections.push(`    MDN (Phone Number): ${sub.mdn || "N/A"}`);
-        });
-      }
-
-      sections.push(`\n  INVOICES (${customer.invoices.length}):`);
-      if (customer.invoices.length === 0) {
-        sections.push("    No invoices found.");
-      } else {
-        customer.invoices.forEach((inv, invIdx) => {
-          sections.push(`\n  [Invoice ${invIdx + 1}]`);
-          sections.push(`    Invoice ID: ${inv.id}`);
-          sections.push(`    Status: ${inv.status}`);
-          sections.push(`    Date: ${formatUnixTimestamp(inv.date)}`);
-          sections.push(`    Due Date: ${formatUnixTimestamp(inv.dueDate)}`);
-          sections.push(`    Paid At: ${formatUnixTimestamp(inv.paidAt)}`);
-          sections.push(`    Subtotal: ${centsToDollars(inv.subTotal)}`);
-          sections.push(`    Tax: ${centsToDollars(inv.tax)}`);
-          sections.push(`    Total: ${centsToDollars(inv.total)}`);
-          sections.push(`    Amount Paid: ${centsToDollars(inv.amountPaid)}`);
-          sections.push(`    Amount Adjusted: ${centsToDollars(inv.amountAdjusted)}`);
-          sections.push(`    Credits Applied: ${centsToDollars(inv.creditsApplied)}`);
-          sections.push(`    Amount Due: ${centsToDollars(inv.amountDue)}`);
-          sections.push(`    Write Off Amount: ${centsToDollars(inv.writeOffAmount)}`);
-          sections.push(`    Dunning Status: ${inv.dunningStatus || "N/A"}`);
-          sections.push(`    Currency: ${inv.currencyCode || "USD"}`);
-          sections.push(`    Recurring: ${inv.recurring ? "Yes" : "No"}`);
-          sections.push(`    First Invoice: ${inv.firstInvoice ? "Yes" : "No"}`);
-        });
-      }
-
-      sections.push(`\n  TRANSACTIONS (${customer.transactions.length}):`);
-      if (customer.transactions.length === 0) {
-        sections.push("    No transactions found.");
-      } else {
-        customer.transactions.forEach((txn, txnIdx) => {
-          sections.push(`\n  [Transaction ${txnIdx + 1}]`);
-          sections.push(`    Transaction ID: ${txn.id}`);
-          sections.push(`    Type: ${txn.type}`);
-          sections.push(`    Status: ${txn.status}`);
-          sections.push(`    Date: ${formatUnixTimestamp(txn.date)}`);
-          sections.push(`    Amount: ${centsToDollars(txn.amount)}`);
-          sections.push(`    Currency: ${txn.currencyCode || "USD"}`);
-          sections.push(`    Gateway: ${txn.gateway || "N/A"}`);
-          sections.push(`    Payment Method: ${txn.paymentMethod || "N/A"}`);
-          sections.push(`    Reference Number: ${txn.referenceNumber || "N/A"}`);
-          sections.push(`    Error Code: ${txn.errorCode || "None"}`);
-          sections.push(`    Error Text: ${txn.errorText || "None"}`);
-        });
-      }
-
-      sections.push(`\n  PAYMENT SOURCES (${customer.paymentSources?.length || 0}):`);
-      if (!customer.paymentSources || customer.paymentSources.length === 0) {
-        sections.push("    No payment sources found.");
-      } else {
-        customer.paymentSources.forEach((ps, psIdx) => {
-          sections.push(`\n  [Payment Source ${psIdx + 1}]`);
-          sections.push(`    ID: ${ps.id}`);
-          sections.push(`    Type: ${ps.type}`);
-          sections.push(`    Status: ${ps.status}`);
-          sections.push(`    Gateway: ${ps.gateway || "N/A"}`);
-          if (ps.card) {
-            sections.push(`    Card Brand: ${ps.card.brand || "N/A"}`);
-            sections.push(`    Card Last 4: ${ps.card.last4 || "N/A"}`);
-            sections.push(`    Card Expiry: ${ps.card.expiryMonth || "??"}/${ps.card.expiryYear || "????"}`);
-            sections.push(`    Card Funding: ${ps.card.fundingType || "N/A"}`);
-          }
-        });
-      }
-    });
-  }
-
-  sections.push(`\n${"=".repeat(60)}`);
-  sections.push(`SOURCE: SHOPIFY + SHIPSTATION (Orders & Shipping)`);
-  sections.push(`${"=".repeat(60)}`);
-
-  if (data.orders.length === 0) {
-    sections.push("No orders found for this email.");
-  } else {
-    sections.push(`Total Orders: ${data.orders.length}`);
-
-    data.orders.forEach((order, orderIdx) => {
-      sections.push(`\n--- ORDER #${orderIdx + 1}: ${order.orderNumber} ---`);
-      sections.push(`Data Source: ${order.source}`);
-      sections.push(`Order ID: ${order.orderId}`);
-      sections.push(`Order Number: ${order.orderNumber}`);
-      sections.push(`Order Date: ${formatISODate(order.orderDate)}`);
-      sections.push(`Order Status: ${order.status || "N/A"}`);
-      sections.push(`Fulfillment Status: ${order.fulfillmentStatus || "Unfulfilled"}`);
-      sections.push(`Payment Status: ${order.paymentStatus || "N/A"}`);
-      sections.push(`Total: ${toDollars(order.total)}`);
-      sections.push(`Currency: ${order.currency || "USD"}`);
-      sections.push(`IMEI (Device ID from Shipstation): ${order.imei || "N/A"}`);
-      sections.push(`ICCID (SIM ID from Shipstation): ${order.iccid || "N/A"}`);
-
-      if (order.shipping) {
-        const sa = order.shipping;
-        sections.push(`Shipping Address: ${sa.name || ""}, ${sa.address1 || ""} ${sa.address2 || ""}, ${sa.city || ""}, ${sa.state || ""} ${sa.zip || ""} ${sa.country || ""}`);
-        sections.push(`Shipping Phone: ${sa.phone || "N/A"}`);
-      }
-
-      sections.push(`\n  LINE ITEMS (${order.items?.length || 0}):`);
-      if (order.items && order.items.length > 0) {
-        order.items.forEach((item, itemIdx) => {
-          sections.push(`    [Item ${itemIdx + 1}] ${item.name || item.sku || "Unknown"}`);
-          sections.push(`      SKU: ${item.sku || "N/A"}`);
-          sections.push(`      Quantity: ${item.quantity || 1}`);
-          sections.push(`      Price: ${toDollars(item.price)}`);
-          sections.push(`      Fulfillment Status: ${item.fulfillmentStatus || "N/A"}`);
-        });
-      }
-
-      sections.push(`\n  TRACKING/SHIPMENTS (${order.tracking?.length || 0}):`);
-      if (order.tracking && order.tracking.length > 0) {
-        order.tracking.forEach((track, trackIdx) => {
-          sections.push(`    [Shipment ${trackIdx + 1}]`);
-          sections.push(`      Tracking Number: ${track.trackingNumber || "N/A"}`);
-          sections.push(`      Carrier: ${track.carrier || "N/A"}`);
-          sections.push(`      Tracking URL: ${track.trackingUrl || "N/A"}`);
-          sections.push(`      Ship Date: ${formatISODate(track.shipDate)}`);
-          sections.push(`      Status: ${track.status || "N/A"}`);
-        });
-      } else {
-        sections.push("    No tracking/shipment info available yet.");
-      }
-    });
-  }
-
-  sections.push(`\n${"=".repeat(60)}`);
-  sections.push(`SOURCE: THINGSPACE (Verizon Device/Line Status)`);
-  sections.push(`${"=".repeat(60)}`);
-
-  if (data.devices.length === 0) {
-    sections.push("No ThingSpace device records found for this customer's ICCIDs.");
-  } else {
-    sections.push(`Total Devices: ${data.devices.length}`);
-
-    data.devices.forEach((device, devIdx) => {
-      sections.push(`\n--- DEVICE #${devIdx + 1} ---`);
-      sections.push(`Account Name: ${device.accountName || "N/A"}`);
-      sections.push(`Device State: ${device.state}`);
-      sections.push(`Connected: ${device.connected ? "YES" : "NO"}`);
-      sections.push(`IP Address: ${device.ipAddress || "N/A"}`);
-      sections.push(`Last Connection: ${formatISODate(device.lastConnectionDate)}`);
-      sections.push(`Last Activation: ${formatISODate(device.lastActivationDate)}`);
-      sections.push(`Billing Cycle End: ${device.billingCycleEndDate || "N/A"}`);
-
-      sections.push(`\n  DEVICE IDENTIFIERS:`);
-      sections.push(`    MDN (Phone Number): ${device.identifiers.mdn || "N/A"}`);
-      sections.push(`    IMSI: ${device.identifiers.imsi || "N/A"}`);
-      sections.push(`    IMEI: ${device.identifiers.imei || "N/A"}`);
-      sections.push(`    ICCID (SIM ID): ${device.identifiers.iccid || "N/A"}`);
-      sections.push(`    MSISDN: ${device.identifiers.msisdn || "N/A"}`);
-      sections.push(`    MIN: ${device.identifiers.min || "N/A"}`);
-
-      if (device.carrier) {
-        sections.push(`\n  CARRIER INFO:`);
-        sections.push(`    Carrier Name: ${device.carrier.name || "N/A"}`);
-        sections.push(`    Service Plan: ${device.carrier.servicePlan || "N/A"}`);
-        sections.push(`    Carrier State: ${device.carrier.state || "N/A"}`);
-      }
-
-      if (device.extendedAttributes && Object.keys(device.extendedAttributes).length > 0) {
-        sections.push(`\n  EXTENDED ATTRIBUTES:`);
-        Object.entries(device.extendedAttributes).forEach(([key, value]) => {
-          sections.push(`    ${key}: ${value}`);
-        });
-      }
-    });
-  }
-
-  sections.push(`\n${"=".repeat(60)}`);
-  sections.push(`END OF CUSTOMER DATA`);
-  sections.push(`${"=".repeat(60)}`);
+  sections.push("=== THINGSPACE DEVICES ===");
+  sections.push("(Verizon carrier data: device/line status, connectivity, MDN/IMEI/ICCID identifiers, service plan)");
+  sections.push(JSON.stringify(data.devices, null, 2));
 
   return sections.join("\n");
 }
@@ -303,24 +57,21 @@ Treat the context as the source of truth. Your job is to **normalize** and **sum
 
 ---
 
-### 2) Data Normalization Rules (Mandatory)
+### 2) Data Format Notes
+
+You receive raw JSON context with all customer data. Key notes:
 
 #### Currency
-
-* **Chargebee amounts are in cents** → divide by 100 and format as **$99.99**.
-* **Shopify money values are strings already in dollars** → parse as dollars, do **not** divide by 100.
-* **ShipStation totals are floats in dollars** → do **not** divide by 100.
+* **All monetary amounts are already in DOLLARS** (e.g., 99.95 means $99.95). Do NOT divide by 100.
+* Format as **$99.95** when presenting to the customer.
 
 #### Dates
-
-* Chargebee timestamps are **Unix seconds** → convert to a friendly date format like **January 28, 2026**.
-* Shopify / ShipStation / ThingSpace timestamps are ISO strings → format to friendly dates.
-* If timezone is unclear, do not invent exact time-of-day; date is enough.
+* All dates are **ISO strings** (e.g., '2026-01-05T02:59:32.000Z').
+* Convert to friendly format like **January 5, 2026** when presenting to the customer.
 
 #### Identifiers
-
-* ICCID is 19–20 digits; IMEI is 15 digits; MDN is 10 digits.
-* If an identifier is missing/“-”, omit it from the response.
+* ICCID is 19-20 digits; IMEI is 15 digits; MDN is 10 digits.
+* If an identifier is missing/null, omit it from the response.
 
 ---
 
@@ -405,7 +156,7 @@ Your response must be short, clear, and formatted like this:
 3. **What You Should Do Next:** 2–4 bullets with concrete actions.
 4. **If You Need Support:** one line telling them how to contact support, only if needed.
 
-Do not dump raw JSON. Do not mention internal API names unless necessary.
+Do not include raw JSON in your response to the customer. Use plain language. Do not mention internal API names unless necessary.
 
 ---
 
