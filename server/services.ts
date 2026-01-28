@@ -1065,24 +1065,30 @@ export async function fetchThingspaceDevice(iccid: string): Promise<ThingspaceDe
       },
       body: JSON.stringify({
         accountName: THINGSPACE_ACCOUNT_NAME,
-        maxNumberOfDevices: 500,
-        largestDeviceIdSeen: 0
+        filter: {
+          deviceIdentifierFilters: [
+            { kind: 'iccid', contains: iccid }
+          ]
+        }
       })
     });
     
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error('ThingSpace API error:', response.status);
+      return null;
+    }
     
     const data = await response.json() as any;
     const devices = data.devices || [];
     
-    const device = devices.find((d: any) => 
-      d.deviceIds?.some((id: any) => id.id === iccid)
-    );
+    if (!devices.length) return null;
     
-    if (!device) return null;
+    const device = devices[0];
     
     const getDeviceId = (kind: string) => {
-      const found = device.deviceIds?.find((id: any) => id.kind === kind);
+      const found = device.deviceIds?.find((id: any) => 
+        id.kind.toLowerCase() === kind.toLowerCase()
+      );
       return found?.id || null;
     };
     

@@ -144,7 +144,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [showDropdown, setShowDropdown] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'orders' | 'invoices' | 'devices'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'orders' | 'invoices' | 'internet'>('overview')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -346,7 +346,7 @@ export default function Dashboard() {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex gap-1">
-            {['overview', 'subscriptions', 'orders', 'invoices', 'devices'].map((tab) => (
+            {['overview', 'subscriptions', 'orders', 'invoices', 'internet'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -385,7 +385,7 @@ export default function Dashboard() {
                     <p className="text-3xl font-bold text-text">{fullData?.orders.length || 0}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
-                    <p className="text-sm text-muted mb-1">Connected Devices</p>
+                    <p className="text-sm text-muted mb-1">Internet Lines</p>
                     <p className="text-3xl font-bold text-text">{fullData?.devices.length || 0}</p>
                   </div>
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -717,9 +717,9 @@ export default function Dashboard() {
               </div>
             )}
 
-            {activeTab === 'devices' && (
+            {activeTab === 'internet' && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-text">Your Devices</h2>
+                <h2 className="text-xl font-semibold text-text">Your Internet</h2>
                 {fullData?.devices.map((device, idx) => (
                   <div key={idx} className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center gap-3 mb-4">
