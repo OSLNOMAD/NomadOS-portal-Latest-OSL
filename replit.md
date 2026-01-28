@@ -140,3 +140,11 @@ npm run db:push  # Push database schema
   - Phone number change requires OTP verification and checks for duplicate numbers
   - Activity Log page with login statistics and account history
   - Removed Activity section from main dashboard (moved to Activity Log page)
+- Jan 28, 2026: Comprehensive Customer Data Integration
+  - Unified service layer (server/services.ts) fetching data from Chargebee, Shopify, Shipstation, ThingSpace
+  - New /api/customer/full-data endpoint aggregating all customer information
+  - Enhanced Dashboard with 5 tabs: Overview, Subscriptions, Orders, Invoices, Devices
+  - Combined Shopify + Shipstation orders with unified tracking information
+  - Subscriptions display ICCID/IMEI/MDN from Chargebee custom fields
+  - ThingSpace integration for device status lookup by ICCID
+  - Expandable "Raw Data" panels on all sections to show complete JSON payloads
