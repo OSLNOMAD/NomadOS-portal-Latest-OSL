@@ -850,18 +850,7 @@ export default function Dashboard() {
 
             {activeTab === 'invoices' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-text">Invoices & Transactions</h2>
-                  {hasCollectibleInvoices && (
-                    <button
-                      onClick={() => fullData?.chargebee.customers[0]?.id && handlePayNow(fullData.chargebee.customers[0].id)}
-                      disabled={paymentLoading === 'pay'}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                    >
-                      {paymentLoading === 'pay' ? 'Loading...' : `Pay All Due (${formatCurrency(collectibleInvoices.reduce((sum, inv) => sum + inv.amountDue, 0))})`}
-                    </button>
-                  )}
-                </div>
+                <h2 className="text-xl font-semibold text-text">Invoices & Transactions</h2>
                 
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
                   <table className="w-full">
