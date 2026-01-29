@@ -166,11 +166,19 @@ npm run db:push  # Push database schema
   - IMEI/ICCID display in Orders section from Shipstation advancedOptions.customField1/2
   - Optimized API calls: Shopify orders by email parameter, Shipstation orders by order numbers
 - Jan 28, 2026: AI Customer Support Chatbot (JADA)
-  - Added OpenAI GPT-4o-mini integration for customer support chatbot named "JADA"
+  - Added OpenAI GPT-4o integration for customer support chatbot named "JADA"
   - Floating chat widget on Dashboard (src/components/ChatWidget.tsx)
   - /api/chat endpoint passes full account context to AI (server/chat.ts)
   - Context includes: subscriptions, invoices, orders, devices, billing info
   - Conversation history maintained for follow-up questions
-  - Cost-effective: ~$0.001 per message with GPT-4o-mini
-  - **To edit AI instructions**: Modify `SYSTEM_PROMPT` constant in `server/chat.ts` (lines 100-116)
+  - **To edit AI instructions**: Modify `SYSTEM_PROMPT` constant in `server/chat.ts`
   - Uses JADA robot avatar (public/jada-avatar.png) for branding
+- Jan 29, 2026: Subscription-Grouped Invoices & Payment Functionality
+  - Added subscriptionId field to invoices for linking invoices to specific subscriptions
+  - Subscription detail modal showing linked invoices and transactions when "View Invoices & Transactions" is clicked
+  - Chargebee hosted page integration for secure payments
+  - "Pay Now" button on subscriptions with outstanding balance (opens Chargebee collect_now page)
+  - "Update Payment Method" button opens Chargebee manage_payment_sources page
+  - Direct "Pay" button on individual invoices in both Invoices tab and subscription detail modal
+  - Pay All Due button in Invoices tab header for bulk payment
+  - API endpoints: /api/billing/collect-now-url, /api/billing/update-payment-method-url, /api/billing/collect-payment

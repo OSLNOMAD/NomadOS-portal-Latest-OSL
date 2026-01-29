@@ -833,6 +833,130 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+app.post("/api/billing/collect-now-url", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) {
+      return res.status(401).json({ error: "Invalid session" });
+    }
+
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const { chargebeeCustomerId, redirectUrl } = req.body;
+    if (!chargebeeCustomerId) {
+      return res.status(400).json({ error: "Chargebee customer ID is required" });
+    }
+
+    const { createCollectNowHostedPage } = await import('./services');
+    const result = await createCollectNowHostedPage(
+      chargebeeCustomerId,
+      redirectUrl || `${req.protocol}://${req.get('host')}/dashboard?payment=success`
+    );
+
+    if (!result) {
+      return res.status(500).json({ error: "Failed to create payment page" });
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Collect now URL error:", error);
+    res.status(500).json({ error: error.message || "Failed to create payment page" });
+  }
+});
+
+app.post("/api/billing/update-payment-method-url", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) {
+      return res.status(401).json({ error: "Invalid session" });
+    }
+
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const { chargebeeCustomerId, redirectUrl } = req.body;
+    if (!chargebeeCustomerId) {
+      return res.status(400).json({ error: "Chargebee customer ID is required" });
+    }
+
+    const { createUpdatePaymentMethodHostedPage } = await import('./services');
+    const result = await createUpdatePaymentMethodHostedPage(
+      chargebeeCustomerId,
+      redirectUrl || `${req.protocol}://${req.get('host')}/dashboard?payment_updated=success`
+    );
+
+    if (!result) {
+      return res.status(500).json({ error: "Failed to create payment method update page" });
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Update payment method URL error:", error);
+    res.status(500).json({ error: error.message || "Failed to create payment method update page" });
+  }
+});
+
+app.post("/api/billing/collect-payment", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) {
+      return res.status(401).json({ error: "Invalid session" });
+    }
+
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    const { invoiceId } = req.body;
+    if (!invoiceId) {
+      return res.status(400).json({ error: "Invoice ID is required" });
+    }
+
+    const { fetchChargebeeData, collectPaymentForInvoice } = await import('./services');
+    const chargebeeData = await fetchChargebeeData(customer.email);
+    
+    const allInvoiceIds = chargebeeData.customers.flatMap(c => c.invoices.map(inv => inv.id));
+    if (!allInvoiceIds.includes(invoiceId)) {
+      return res.status(403).json({ error: "Invoice not found for this customer" });
+    }
+
+    const result = await collectPaymentForInvoice(invoiceId);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || "Payment collection failed" });
+    }
+
+    res.json({ success: true, message: "Payment collected successfully" });
+  } catch (error: any) {
+    console.error("Collect payment error:", error);
+    res.status(500).json({ error: error.message || "Failed to collect payment" });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });

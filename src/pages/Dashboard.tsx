@@ -60,6 +60,8 @@ interface ChargebeeSubscription {
 
 interface ChargebeeInvoice {
   id: string
+  subscriptionId: string | null
+  customerId: string
   status: string
   date: string
   total: number
@@ -76,6 +78,11 @@ interface ChargebeeTransaction {
   amount: number
   errorCode: string | null
   errorText: string | null
+  linkedInvoices?: Array<{
+    invoiceId: string
+    appliedAmount: number
+    appliedAt: string
+  }>
 }
 
 interface ChargebeeCustomer {
@@ -157,6 +164,14 @@ interface FullData {
   devices: ThingspaceDevice[]
 }
 
+interface SubscriptionDetail {
+  subscription: ChargebeeSubscription
+  customerId: string
+  customerName: string
+  invoices: ChargebeeInvoice[]
+  transactions: ChargebeeTransaction[]
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [customer, setCustomer] = useState<Customer | null>(null)
@@ -166,6 +181,8 @@ export default function Dashboard() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'subscriptions' | 'orders' | 'invoices' | 'internet'>('overview')
   const [authToken, setAuthToken] = useState<string | null>(null)
+  const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionDetail | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -291,6 +308,118 @@ export default function Dashboard() {
   const allSubscriptions = fullData?.chargebee.customers.flatMap(c => c.subscriptions) || []
   const allInvoices = fullData?.chargebee.customers.flatMap(c => c.invoices) || []
   const allTransactions = fullData?.chargebee.customers.flatMap(c => c.transactions) || []
+
+  const openSubscriptionDetail = (subscription: ChargebeeSubscription, cbCustomer: ChargebeeCustomer) => {
+    const linkedInvoices = cbCustomer.invoices.filter(inv => inv.subscriptionId === subscription.id)
+    const invoiceIds = new Set(linkedInvoices.map(inv => inv.id))
+    const linkedTransactions = cbCustomer.transactions.filter(txn => 
+      txn.linkedInvoices?.some(li => invoiceIds.has(li.invoiceId))
+    )
+    
+    setSelectedSubscription({
+      subscription,
+      customerId: cbCustomer.id,
+      customerName: `${cbCustomer.firstName} ${cbCustomer.lastName}`,
+      invoices: linkedInvoices,
+      transactions: linkedTransactions
+    })
+  }
+
+  const handlePayNow = async (chargebeeCustomerId: string) => {
+    setPaymentLoading('pay')
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch('/api/billing/collect-now-url', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          chargebeeCustomerId,
+          redirectUrl: `${window.location.origin}/dashboard?payment=success`
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.url) {
+          window.open(data.url, '_blank')
+        }
+      } else {
+        alert('Failed to open payment page. Please try again.')
+      }
+    } catch (error) {
+      console.error('Payment error:', error)
+      alert('Failed to open payment page. Please try again.')
+    } finally {
+      setPaymentLoading(null)
+    }
+  }
+
+  const handleUpdatePaymentMethod = async (chargebeeCustomerId: string) => {
+    setPaymentLoading('update')
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch('/api/billing/update-payment-method-url', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          chargebeeCustomerId,
+          redirectUrl: `${window.location.origin}/dashboard?payment_updated=success`
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.url) {
+          window.open(data.url, '_blank')
+        }
+      } else {
+        alert('Failed to open payment method page. Please try again.')
+      }
+    } catch (error) {
+      console.error('Update payment method error:', error)
+      alert('Failed to open payment method page. Please try again.')
+    } finally {
+      setPaymentLoading(null)
+    }
+  }
+
+  const handleCollectPayment = async (invoiceId: string) => {
+    if (!confirm('This will attempt to charge your payment method on file. Continue?')) {
+      return
+    }
+    
+    setPaymentLoading(invoiceId)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch('/api/billing/collect-payment', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ invoiceId })
+      })
+      
+      if (response.ok) {
+        alert('Payment collected successfully! Refreshing data...')
+        window.location.reload()
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Payment collection failed. Please try again or update your payment method.')
+      }
+    } catch (error) {
+      console.error('Collect payment error:', error)
+      alert('Payment collection failed. Please try again.')
+    } finally {
+      setPaymentLoading(null)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -581,6 +710,31 @@ export default function Dashboard() {
                                 </div>
                               </div>
                             )}
+
+                            <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-3">
+                              <button
+                                onClick={() => openSubscriptionDetail(sub, cbCustomer)}
+                                className="px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
+                              >
+                                View Invoices & Transactions
+                              </button>
+                              {sub.totalDues > 0 && (
+                                <button
+                                  onClick={() => handlePayNow(cbCustomer.id)}
+                                  disabled={paymentLoading === 'pay'}
+                                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                                >
+                                  {paymentLoading === 'pay' ? 'Loading...' : `Pay ${formatCurrency(sub.totalDues)}`}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleUpdatePaymentMethod(cbCustomer.id)}
+                                disabled={paymentLoading === 'update'}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                              >
+                                {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
+                              </button>
+                            </div>
                             
                             <RawDataPanel data={sub} title="Subscription" />
                           </div>
@@ -720,26 +874,38 @@ export default function Dashboard() {
 
             {activeTab === 'invoices' && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-text">Invoices & Transactions</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-text">Invoices & Transactions</h2>
+                  {fullData?.chargebee.totalDue && fullData.chargebee.totalDue > 0 && (
+                    <button
+                      onClick={() => fullData?.chargebee.customers[0]?.id && handlePayNow(fullData.chargebee.customers[0].id)}
+                      disabled={paymentLoading === 'pay'}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {paymentLoading === 'pay' ? 'Loading...' : `Pay All Due (${formatCurrency(fullData.chargebee.totalDue)})`}
+                    </button>
+                  )}
+                </div>
                 
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="text-left px-6 py-3 text-xs font-medium text-muted uppercase">Invoice</th>
-                        <th className="text-left px-6 py-3 text-xs font-medium text-muted uppercase">Date</th>
-                        <th className="text-left px-6 py-3 text-xs font-medium text-muted uppercase">Status</th>
-                        <th className="text-right px-6 py-3 text-xs font-medium text-muted uppercase">Total</th>
-                        <th className="text-right px-6 py-3 text-xs font-medium text-muted uppercase">Paid</th>
-                        <th className="text-right px-6 py-3 text-xs font-medium text-muted uppercase">Due</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Invoice</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Date</th>
+                        <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase">Status</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Total</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Paid</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Due</th>
+                        <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {allInvoices.map((inv) => (
                         <tr key={inv.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm font-medium text-text">{inv.id}</td>
-                          <td className="px-6 py-4 text-sm text-muted">{formatDate(inv.date)}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4 text-sm font-medium text-text">{inv.id}</td>
+                          <td className="px-4 py-4 text-sm text-muted">{formatDate(inv.date)}</td>
+                          <td className="px-4 py-4">
                             <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
                               {inv.status}
                             </span>
@@ -749,10 +915,23 @@ export default function Dashboard() {
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-right font-medium">{formatCurrency(inv.total)}</td>
-                          <td className="px-6 py-4 text-sm text-right text-green-600">{formatCurrency(inv.amountPaid)}</td>
-                          <td className={`px-6 py-4 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
+                          <td className="px-4 py-4 text-sm text-right font-medium">{formatCurrency(inv.total)}</td>
+                          <td className="px-4 py-4 text-sm text-right text-green-600">{formatCurrency(inv.amountPaid)}</td>
+                          <td className={`px-4 py-4 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
                             {formatCurrency(inv.amountDue)}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            {inv.amountDue > 0 ? (
+                              <button
+                                onClick={() => handleCollectPayment(inv.id)}
+                                disabled={paymentLoading === inv.id}
+                                className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                              >
+                                {paymentLoading === inv.id ? '...' : 'Pay Now'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-green-600">Paid</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -868,6 +1047,160 @@ export default function Dashboard() {
       </main>
       
       {authToken && <ChatWidget token={authToken} dataLoaded={!isLoadingData} />}
+
+      {selectedSubscription && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-text">Subscription Details</h2>
+                <p className="text-sm text-muted">{selectedSubscription.subscription.planId}</p>
+              </div>
+              <button
+                onClick={() => setSelectedSubscription(null)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted">Status</p>
+                    <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${getStatusColor(selectedSubscription.subscription.status)}`}>
+                      {selectedSubscription.subscription.status}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-muted">Amount</p>
+                    <p className="font-bold text-primary">{formatCurrency(selectedSubscription.subscription.planAmount)}/{selectedSubscription.subscription.billingPeriodUnit}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted">Next Billing</p>
+                    <p className="font-medium">{formatDate(selectedSubscription.subscription.nextBillingAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted">Amount Due</p>
+                    <p className={`font-bold ${selectedSubscription.subscription.totalDues > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {formatCurrency(selectedSubscription.subscription.totalDues)}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedSubscription.subscription.totalDues > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 flex gap-3">
+                    <button
+                      onClick={() => handlePayNow(selectedSubscription.customerId)}
+                      disabled={paymentLoading === 'pay'}
+                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {paymentLoading === 'pay' ? 'Loading...' : `Pay Now ${formatCurrency(selectedSubscription.subscription.totalDues)}`}
+                    </button>
+                    <button
+                      onClick={() => handleUpdatePaymentMethod(selectedSubscription.customerId)}
+                      disabled={paymentLoading === 'update'}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-text mb-4">Invoices for this Subscription</h3>
+                {selectedSubscription.invoices.length > 0 ? (
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Invoice</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Total</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Due</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedSubscription.invoices.map((inv) => (
+                          <tr key={inv.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium text-text">{inv.id}</td>
+                            <td className="px-4 py-3 text-sm text-muted">{formatDate(inv.date)}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(inv.total)}</td>
+                            <td className={`px-4 py-3 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
+                              {formatCurrency(inv.amountDue)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {inv.amountDue > 0 && (
+                                <button
+                                  onClick={() => handleCollectPayment(inv.id)}
+                                  disabled={paymentLoading === inv.id}
+                                  className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                  {paymentLoading === inv.id ? '...' : 'Pay'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-muted text-sm">No invoices found for this subscription</p>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-text mb-4">Transactions for this Subscription</h3>
+                {selectedSubscription.transactions.length > 0 ? (
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Type</th>
+                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
+                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedSubscription.transactions.map((txn) => (
+                          <tr key={txn.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-muted">{formatDate(txn.date)}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-text">{txn.type}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(txn.status)}`}>
+                                {txn.status}
+                              </span>
+                              {txn.errorCode && (
+                                <span className="ml-2 text-xs text-red-600">({txn.errorCode})</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(txn.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-muted text-sm">No transactions found for this subscription</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

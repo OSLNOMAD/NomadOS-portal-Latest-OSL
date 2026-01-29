@@ -80,6 +80,8 @@ export interface ChargebeeSubscription {
 
 export interface ChargebeeInvoice {
   id: string;
+  subscriptionId: string | null;
+  customerId: string;
   status: string;
   date: string;
   dueDate: string | null;
@@ -530,6 +532,8 @@ function parseChargebeeSubscription(s: any): ChargebeeSubscription {
 function parseChargebeeInvoice(inv: any): ChargebeeInvoice {
   return {
     id: inv.id,
+    subscriptionId: inv.subscription_id || null,
+    customerId: inv.customer_id || '',
     status: inv.status,
     date: inv.date ? new Date(inv.date * 1000).toISOString() : '',
     dueDate: inv.due_date ? new Date(inv.due_date * 1000).toISOString() : null,
@@ -1178,4 +1182,78 @@ export async function fetchCustomerFullData(email: string): Promise<CustomerFull
     orders,
     devices
   };
+}
+
+async function chargebeeApiPost(endpoint: string, data: Record<string, string>): Promise<any> {
+  if (!CHARGEBEE_API_KEY || !CHARGEBEE_SITE) return null;
+  
+  const credentials = Buffer.from(`${CHARGEBEE_API_KEY}:`).toString('base64');
+  const formData = new URLSearchParams();
+  for (const [key, value] of Object.entries(data)) {
+    formData.append(key, value);
+  }
+  
+  const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: formData.toString()
+  });
+  
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Chargebee API error:', error);
+    return null;
+  }
+  return response.json();
+}
+
+export async function createCollectNowHostedPage(customerId: string, redirectUrl: string): Promise<{ url: string } | null> {
+  try {
+    const result = await chargebeeApiPost('/hosted_pages/collect_now', {
+      'customer[id]': customerId,
+      'redirect_url': redirectUrl
+    });
+    
+    if (result?.hosted_page?.url) {
+      return { url: result.hosted_page.url };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error creating collect_now hosted page:', error);
+    return null;
+  }
+}
+
+export async function createUpdatePaymentMethodHostedPage(customerId: string, redirectUrl: string): Promise<{ url: string } | null> {
+  try {
+    const result = await chargebeeApiPost('/hosted_pages/manage_payment_sources', {
+      'customer[id]': customerId,
+      'redirect_url': redirectUrl
+    });
+    
+    if (result?.hosted_page?.url) {
+      return { url: result.hosted_page.url };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error creating update_payment_method hosted page:', error);
+    return null;
+  }
+}
+
+export async function collectPaymentForInvoice(invoiceId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await chargebeeApiPost(`/invoices/${invoiceId}/collect_payment`, {});
+    
+    if (result?.invoice) {
+      return { success: true };
+    }
+    return { success: false, error: 'Payment collection failed' };
+  } catch (error: any) {
+    console.error('Error collecting payment:', error);
+    return { success: false, error: error.message || 'Payment collection failed' };
+  }
 }
