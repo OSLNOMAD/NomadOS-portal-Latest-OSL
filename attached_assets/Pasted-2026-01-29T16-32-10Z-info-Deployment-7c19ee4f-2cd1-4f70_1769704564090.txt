@@ -1,0 +1,83 @@
+2026-01-29T16:32:10Z info: Deployment: 7c19ee4f-2cd1-4f70-bc5f-375bce127c43
+2026-01-29T16:32:10Z info: Build: 1d77dc3e-8e35-490c-8c49-f7df11586dc6
+2026-01-29T16:32:10Z info: Running Security Scan
+2026-01-29T16:32:13Z info: Security Scan Complete
+2026-01-29T16:32:13Z info: Connecting to builder
+2026-01-29T16:32:14Z info: Builder connected
+2026-01-29T16:32:15Z info: Installing packages
+--> npm install
+
+
+up to date, audited 326 packages in 3s
+
+
+76 packages are looking for funding
+  run `npm fund` for details
+
+
+4 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.8.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.8.0
+npm notice To update run: npm install -g npm@11.8.0
+npm notice
+
+2026-01-29T16:32:19Z info: Skipping Build as no Build command set
+2026-01-29T16:32:20Z info: Pushing pid1 binary layer...
+2026-01-29T16:32:23Z info: Pushing Repl layer...
+2026-01-29T16:32:24Z info: Retrieved cached nix layer
+2026-01-29T16:32:25Z info: Created hosting layer
+2026-01-29T16:32:33Z info: Created pid1 binary layer
+2026-01-29T16:33:03Z info: Created Repl layer
+2026-01-29T16:33:10Z info: Pushed image manifest
+2026-01-29T16:33:13Z info: Pushed soci index manifest
+2026-01-29T16:33:17Z info: Creating Autoscale service
+    at Function.route (/home/runner/workspace/node_modules/router/index.js:428:17)
+    at matcher (/home/runner/workspace/node_modules/router/lib/layer.js:86:23)
+> NODE_ENV=production npx tsx server/index.ts
+    at pathToRegexp (/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:480:54)
+
+            ^
+    at Function.route (/home/runner/workspace/node_modules/express/lib/application.js:257:22)
+            ^
+
+command finished with error [npm run start]: exit status 1
+  originalPath: '*'
+    at Function.route (/home/runner/workspace/node_modules/router/index.js:428:17)
+      throw new PathError(`Missing parameter name at index ${index}`, str);
+
+}
+Node.js v20.20.0
+
+    at parse (/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:242:62)
+> nomad-portal@0.0.0 start
+/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:225
+
+
+    at Function.route (/home/runner/workspace/node_modules/router/index.js:428:17)
+    at app.<computed> [as get] (/home/runner/workspace/node_modules/express/lib/application.js:478:22)
+    at name (/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:225:13)
+
+    at new Layer (/home/runner/workspace/node_modules/router/lib/layer.js:93:62)
+/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:225
+PathError [TypeError]: Missing parameter name at index 1: *; visit https://git.new/pathToRegexpError for info
+    at name (/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:225:13)
+
+    at app.<computed> [as get] (/home/runner/workspace/node_modules/express/lib/application.js:478:22)
+      throw new PathError(`Missing parameter name at index ${index}`, str);
+
+    at parse (/home/runner/workspace/node_modules/path-to-regexp/src/index.ts:242:62)
+Node.js v20.20.0
+    at new Layer (/home/runner/workspace/node_modules/router/lib/layer.js:93:62)
+
+
+      throw new PathError(`Missing parameter name at index ${index}`, str);
+command finished with error [npm run start]: exit status 1
+crash loop detected
+2026-01-29T16:34:47Z error: The deployment is crash looping. This can happen if the run command fails or exits immediately after starting. Check the logs for more information.
