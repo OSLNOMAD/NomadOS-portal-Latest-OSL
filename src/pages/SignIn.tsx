@@ -180,7 +180,8 @@ export default function SignIn() {
             </p>
             <Link 
               to="/signup" 
-              className="inline-block w-full py-3 px-6 bg-gradient-to-r from-primary to-accent text-white font-semibold rounded-lg hover:shadow-lg transition-all"
+              className="inline-block w-full py-3 px-6 font-semibold rounded-lg hover:shadow-lg transition-all"
+              style={{ background: 'linear-gradient(to right, #10a37f, #0a8f6a)', color: 'white' }}
             >
               Sign Up Now
             </Link>
