@@ -46,6 +46,14 @@ body {
 }
 #root { min-height: 100vh; }
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* =========================
    3) Core Layout (2 Columns)
 ========================= */
@@ -423,10 +431,71 @@ body {
     gap: var(--s-2);
   }
   .auth-right { padding: 24px; }
+  
+  .dashboard-card {
+    padding: 16px;
+  }
+  
+  .settings-section {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .auth-left {
+    min-height: 200px;
+    padding: 20px;
+  }
+  
+  .brand-title {
+    font-size: 28px;
+  }
+  
+  .brand-subtitle {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+  
+  .brand-copy {
+    display: none;
+  }
+  
+  .stat-value {
+    font-size: 24px;
+  }
+  
+  .stat-label {
+    font-size: 10px;
+  }
+  
+  .auth-card {
+    padding: 24px 20px;
+  }
+  
+  .auth-title {
+    font-size: 28px;
+  }
+  
+  .dashboard-title {
+    font-size: 24px;
+  }
+  
+  .dashboard-subtitle {
+    font-size: 14px;
+  }
+  
+  .profile-dropdown {
+    right: -10px;
+    min-width: 220px;
+  }
+  
+  .activity-stat-value {
+    font-size: 24px;
+  }
 }
 
 @media (max-width: 520px) {
-  .brand-stats { grid-template-columns: 1fr; }
+  .brand-stats { grid-template-columns: repeat(3, 1fr); }
   .form-row {
     flex-direction: column;
     align-items: flex-start;
@@ -434,6 +503,37 @@ body {
     margin-top: 0;
   }
   .btn-primary { height: 52px; }
+  
+  .auth-left {
+    min-height: 160px;
+    padding: 16px;
+  }
+  
+  .auth-right {
+    padding: 16px;
+  }
+  
+  .auth-card {
+    padding: 20px 16px;
+  }
+  
+  .settings-section {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .settings-actions {
+    flex-direction: column;
+  }
+  
+  .otp-input-group {
+    flex-direction: column;
+  }
+  
+  .activity-item {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 /* =========================
