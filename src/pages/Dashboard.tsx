@@ -1128,8 +1128,7 @@ export default function Dashboard() {
                                   <div>
                                     <p className="font-semibold text-red-800">Payment Overdue</p>
                                     <p className="text-sm text-red-700">
-                                      Your payment of {formatCurrency(subscription.totalDues)} is {gracePeriod.daysOverdue} day{gracePeriod.daysOverdue !== 1 ? 's' : ''} overdue. 
-                                      Please pay immediately to restore your service.
+                                      You are outside your 3-day grace period. Please pay your outstanding balance of {formatCurrency(subscription.totalDues)} to restore your services.
                                     </p>
                                   </div>
                                 </div>
