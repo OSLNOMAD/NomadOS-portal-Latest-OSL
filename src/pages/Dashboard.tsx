@@ -405,7 +405,7 @@ export default function Dashboard() {
     }
   }
 
-  const handleTroubleshooting = async (subscriptionId: string, iccid: string | null, imei: string | null, mdn: string | null) => {
+  const handleTroubleshooting = async (subscriptionId: string, iccid: string | null, imei: string | null, mdn: string | null, lineStatus: string | null) => {
     if (troubleshootingSubscription === subscriptionId) {
       setTroubleshootingSubscription(null)
       setTroubleshootingStatus(null)
@@ -413,8 +413,7 @@ export default function Dashboard() {
     }
 
     setTroubleshootingSubscription(subscriptionId)
-    setTroubleshootingStatus({ step: 'checking', message: 'Checking line status...' })
-
+    
     const identifier = iccid || imei || mdn
     const identifierType = iccid ? 'iccid' : imei ? 'imei' : 'mdn'
 
@@ -423,45 +422,27 @@ export default function Dashboard() {
       return
     }
 
-    try {
-      const token = localStorage.getItem('auth_token')
-      const statusResponse = await fetch('/api/device/status', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ identifier, identifierType })
+    const normalizedState = (lineStatus || 'unknown').toLowerCase().replace(/[-_]/g, '')
+    
+    if (normalizedState === 'active') {
+      setTroubleshootingStatus({ 
+        step: 'already_active', 
+        message: 'Your line is already active and connected.'
+      })
+      return
+    }
+
+    const suspendedStates = ['suspend', 'suspended', 'pendingsuspend', 'pending_suspend', 'deactive', 'deactivate']
+    const isSuspended = suspendedStates.some(s => normalizedState.includes(s.replace(/[-_]/g, '')))
+
+    if (isSuspended) {
+      setTroubleshootingStatus({ 
+        step: 'resuming', 
+        message: `Line is suspended. Resuming ICCID: ${iccid || identifier}...`
       })
 
-      if (!statusResponse.ok) {
-        setTroubleshootingStatus({ step: 'error', message: 'Unable to retrieve device status.' })
-        return
-      }
-
-      const statusData = await statusResponse.json()
-      const device = statusData.device as ThingspaceDevice
-      const normalizedState = device.state.toLowerCase().replace(/[-_]/g, '')
-
-      if (normalizedState === 'active') {
-        setTroubleshootingStatus({ 
-          step: 'already_active', 
-          message: 'Your line is already active and connected.', 
-          deviceStatus: device 
-        })
-        return
-      }
-
-      const suspendedStates = ['suspend', 'suspended', 'pendingsuspend', 'pending_suspend', 'deactive', 'deactivate']
-      const isSuspended = suspendedStates.some(s => normalizedState.includes(s.replace(/[-_]/g, '')))
-
-      if (isSuspended) {
-        setTroubleshootingStatus({ 
-          step: 'resuming', 
-          message: 'Line is suspended. Attempting to resume...', 
-          deviceStatus: device 
-        })
-
+      try {
+        const token = localStorage.getItem('auth_token')
         const resumeResponse = await fetch('/api/device/resume', {
           method: 'POST',
           headers: {
@@ -475,27 +456,24 @@ export default function Dashboard() {
           await resumeResponse.json()
           setTroubleshootingStatus({ 
             step: 'success', 
-            message: 'Resume request submitted successfully. Your line should be active within a few minutes.',
-            deviceStatus: device 
+            message: `Resume request submitted for ICCID: ${iccid || identifier}. Your line should be active within a few minutes.`
           })
         } else {
           const errorData = await resumeResponse.json()
           setTroubleshootingStatus({ 
             step: 'error', 
-            message: errorData.error || 'Failed to resume line. Please contact support.',
-            deviceStatus: device 
+            message: errorData.error || 'Failed to resume line. Please contact support.'
           })
         }
-      } else {
-        setTroubleshootingStatus({ 
-          step: 'error', 
-          message: `Line status: ${device.state}. Please contact support for assistance.`,
-          deviceStatus: device 
-        })
+      } catch (error) {
+        console.error('Troubleshooting error:', error)
+        setTroubleshootingStatus({ step: 'error', message: 'An error occurred. Please try again.' })
       }
-    } catch (error) {
-      console.error('Troubleshooting error:', error)
-      setTroubleshootingStatus({ step: 'error', message: 'An error occurred. Please try again.' })
+    } else {
+      setTroubleshootingStatus({ 
+        step: 'error', 
+        message: `Line status: ${lineStatus || 'unknown'}. Please contact support for assistance.`
+      })
     }
   }
 
@@ -1226,7 +1204,7 @@ export default function Dashboard() {
                                 {paymentLoading === 'pay' ? 'Loading...' : `Pay Now ${formatCurrency(subscription.totalDues)}`}
                               </button>
                               <button
-                                onClick={() => handleTroubleshooting(subscription.id, subscription.iccid, subscription.imei, subscription.mdn)}
+                                onClick={() => handleTroubleshooting(subscription.id, subscription.iccid, subscription.imei, subscription.mdn, lineState)}
                                 className={`px-4 py-3 text-sm font-medium border-2 rounded-lg transition-colors flex items-center gap-2 ${
                                   troubleshootingSubscription === subscription.id 
                                     ? 'bg-primary text-white border-primary' 
@@ -1320,7 +1298,7 @@ export default function Dashboard() {
                         {isActive && isPaid && (
                           <div className="mt-4">
                             <button
-                              onClick={() => handleTroubleshooting(subscription.id, subscription.iccid, subscription.imei, subscription.mdn)}
+                              onClick={() => handleTroubleshooting(subscription.id, subscription.iccid, subscription.imei, subscription.mdn, lineState)}
                               className={`w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
                                 troubleshootingSubscription === subscription.id 
                                   ? 'bg-accent text-white' 
