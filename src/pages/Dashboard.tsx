@@ -947,7 +947,8 @@ export default function Dashboard() {
             {activeTab === 'internet' && (
               <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-text">Your Internet Services</h2>
-                {allSubscriptions.map((subscription, idx) => {
+                {fullData?.chargebee.customers.flatMap(cbCustomer => 
+                  cbCustomer.subscriptions.map((subscription, idx) => {
                   const device = fullData?.devices.find(d => 
                     (subscription.iccid && d.identifiers.iccid === subscription.iccid) || 
                     (subscription.imei && d.identifiers.imei === subscription.imei) ||
@@ -972,8 +973,23 @@ export default function Dashboard() {
                   }
                   
                   const lineStatus = getLineStatusInfo()
-                  const isActive = subscription.status === 'active'
+                  const activeStatuses = ['active', 'future', 'in_trial']
+                  const isActive = activeStatuses.includes(subscription.status)
                   const isPaid = subscription.dueInvoicesCount === 0 && subscription.totalDues === 0
+                  
+                  const getStatusDisplay = () => {
+                    if (activeStatuses.includes(subscription.status)) {
+                      return { label: 'Active', color: 'bg-green-100 text-green-800' }
+                    }
+                    if (subscription.status === 'cancelled' || subscription.status === 'canceled') {
+                      return { label: 'Canceled', color: 'bg-gray-100 text-gray-800' }
+                    }
+                    if (subscription.status === 'paused') {
+                      return { label: 'Paused', color: 'bg-yellow-100 text-yellow-800' }
+                    }
+                    return { label: subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1), color: 'bg-gray-100 text-gray-800' }
+                  }
+                  const statusDisplay = getStatusDisplay()
                   
                   return (
                     <div key={subscription.id || idx} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -984,16 +1000,16 @@ export default function Dashboard() {
                             <p className="text-sm text-muted">Subscription #{subscription.id}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {isActive ? 'Active' : 'Inactive'}
+                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusDisplay.color}`}>
+                              {statusDisplay.label}
                             </span>
-                            <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                              isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              {isPaid ? 'Paid' : 'Unpaid'}
-                            </span>
+                            {isActive && (
+                              <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {isPaid ? 'Paid' : 'Unpaid'}
+                              </span>
+                            )}
                           </div>
                         </div>
                         
@@ -1043,13 +1059,15 @@ export default function Dashboard() {
                               }`}>
                                 Internet {lineStatus.label}
                               </p>
-                              <p className={`text-sm ${
-                                lineStatus.color === 'green' ? 'text-green-600' :
-                                lineStatus.color === 'yellow' ? 'text-yellow-600' :
-                                'text-red-600'
-                              }`}>
-                                {lineState ? `Line Status: ${lineState}` : 'Unable to retrieve line status'}
-                              </p>
+                              {lineState && (
+                                <p className={`text-sm ${
+                                  lineStatus.color === 'green' ? 'text-green-600' :
+                                  lineStatus.color === 'yellow' ? 'text-yellow-600' :
+                                  'text-red-600'
+                                }`}>
+                                  Line Status: {lineState}
+                                </p>
+                              )}
                             </div>
                             {device?.ipAddress && lineStatus.color === 'green' && (
                               <div className="text-right">
@@ -1059,10 +1077,22 @@ export default function Dashboard() {
                             )}
                           </div>
                         </div>
+                        
+                        {isActive && !isPaid && (
+                          <div className="px-6 pb-6">
+                            <button
+                              onClick={() => handlePayNow(cbCustomer.id)}
+                              disabled={paymentLoading === 'pay'}
+                              className="w-full px-4 py-3 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                            >
+                              {paymentLoading === 'pay' ? 'Loading...' : `Pay Now ${formatCurrency(subscription.totalDues)}`}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
-                })}
+                }))}
                 {allSubscriptions.length === 0 && (
                   <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                     <p className="text-muted">No subscriptions found</p>
