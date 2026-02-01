@@ -36,25 +36,32 @@ src/
 ├── components/
 │   ├── AuthLayout.tsx    # Two-column layout with glassmorphism card
 │   ├── Button.tsx        # Gradient button with hover animations
+│   ├── ChatWidget.tsx    # JADA AI chatbot floating widget
 │   └── Input.tsx         # Tall styled input with tooltips
 ├── pages/
 │   ├── SignIn.tsx        # Sign-in page (password or OTP)
 │   ├── SignUp.tsx        # Multi-step sign-up flow
 │   ├── ForgotPassword.tsx # Password reset flow
-│   ├── Dashboard.tsx     # User dashboard with profile dropdown
+│   ├── Dashboard.tsx     # Main dashboard (5 tabs: Overview, Subscriptions, Orders, Invoices, Internet)
 │   ├── AccountSettings.tsx # Update name, password, phone
-│   └── ActivityLog.tsx   # Login history and activity
+│   ├── ActivityLog.tsx   # Login history and activity
+│   └── TestLogin.tsx     # Test portal at /testing6699452
 ├── App.tsx               # Router configuration
 ├── main.tsx              # App entry point
 └── index.css             # Global styles + design tokens
 
 server/
-├── index.ts              # Express API endpoints
-├── storage.ts            # Database storage layer
+├── index.ts              # Express API endpoints (auth, billing, device management)
+├── services.ts           # External API integrations (Chargebee, Shopify, Shipstation, ThingSpace)
+├── chat.ts               # JADA AI chatbot with OpenAI GPT-4o
+├── storage.ts            # Database storage layer (customers, sessions, OTP)
 └── db.ts                 # Drizzle database connection
 
 shared/
 └── schema.ts             # Database schema (customers, otp_codes, sessions)
+
+docs/
+└── API-DOCUMENTATION.md  # External API integration reference
 ```
 
 ## Database Schema
