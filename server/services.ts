@@ -1463,6 +1463,7 @@ export async function changeDevicePlan(
   }
   
   try {
+    // ThingSpace API requires either devices array OR filter criteria (like currentServicePlan), not both
     const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/plan', {
       method: 'PUT',
       headers: {
@@ -1482,8 +1483,7 @@ export async function changeDevicePlan(
             ]
           }
         ],
-        servicePlan: newPlan,
-        currentServicePlan: currentPlan
+        servicePlan: newPlan
       })
     });
     
