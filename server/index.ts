@@ -1139,6 +1139,133 @@ app.post("/api/device/status", async (req, res) => {
   }
 });
 
+app.get("/api/device/plans", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const session = await storage.getSessionByToken(token);
+    let isTest = false;
+    
+    if (!session) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        if (decoded.isTest) {
+          isTest = true;
+        } else {
+          return res.status(401).json({ error: "Invalid session" });
+        }
+      } catch {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+    }
+
+    const { getAvailablePlans } = await import('./services');
+    const plans = await getAvailablePlans();
+
+    if (!plans) {
+      return res.status(500).json({ error: "Failed to fetch available plans" });
+    }
+
+    res.json({ success: true, plans });
+  } catch (error: any) {
+    console.error("Get plans error:", error);
+    res.status(500).json({ error: error.message || "Failed to get plans" });
+  }
+});
+
+app.post("/api/device/change-plan", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const session = await storage.getSessionByToken(token);
+    let customerEmail: string | null = null;
+    let isTest = false;
+    
+    if (!session) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        if (decoded.isTest) {
+          isTest = true;
+          customerEmail = decoded.email;
+        } else {
+          return res.status(401).json({ error: "Invalid session" });
+        }
+      } catch {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+    } else {
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(401).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Could not determine customer" });
+    }
+
+    const { identifier, identifierType = 'iccid', newPlan } = req.body;
+    
+    if (!identifier) {
+      return res.status(400).json({ error: "Device identifier is required" });
+    }
+    if (!newPlan) {
+      return res.status(400).json({ error: "New plan is required" });
+    }
+
+    // Verify device ownership by checking it belongs to customer's subscriptions
+    const { fetchCustomerFullData, getDeviceStatus, changeDevicePlan } = await import('./services');
+    const fullData = await fetchCustomerFullData(customerEmail);
+    
+    if (!fullData) {
+      return res.status(400).json({ error: "Could not verify device ownership" });
+    }
+
+    // Check if identifier belongs to any of the customer's subscriptions
+    const allSubscriptions = fullData.chargebee.customers.flatMap(c => c.subscriptions);
+    const ownsDevice = allSubscriptions.some(sub => {
+      if (identifierType === 'iccid' && sub.iccid === identifier) return true;
+      if (identifierType === 'imei' && sub.imei === identifier) return true;
+      if (identifierType === 'mdn' && sub.mdn === identifier) return true;
+      return false;
+    });
+
+    if (!ownsDevice) {
+      return res.status(403).json({ error: "You do not have permission to modify this device" });
+    }
+
+    // Get the actual current plan from ThingSpace (don't trust client)
+    const deviceStatus = await getDeviceStatus(identifier, identifierType);
+    if (!deviceStatus || !deviceStatus.carrier?.servicePlan) {
+      return res.status(400).json({ error: "Could not determine current plan for this device" });
+    }
+
+    const currentPlan = deviceStatus.carrier.servicePlan;
+    
+    if (currentPlan === newPlan) {
+      return res.status(400).json({ error: "New plan must be different from current plan" });
+    }
+
+    const result = await changeDevicePlan(identifier, identifierType, currentPlan, newPlan);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error || "Failed to change plan" });
+    }
+
+    res.json({ success: true, requestId: result.requestId });
+  } catch (error: any) {
+    console.error("Change plan error:", error);
+    res.status(500).json({ error: error.message || "Failed to change plan" });
+  }
+});
+
 if (process.env.NODE_ENV === "production") {
   const distPath = path.join(__dirname, "..", "dist");
   app.use(express.static(distPath));

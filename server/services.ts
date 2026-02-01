@@ -1404,3 +1404,110 @@ export async function getDeviceStatus(identifier: string, identifierType: 'iccid
     return null;
   }
 }
+
+export interface ServicePlan {
+  name: string;
+  code: string;
+  sizeKb: number;
+  carrierServicePlanCode: string;
+}
+
+export async function getAvailablePlans(): Promise<ServicePlan[] | null> {
+  if (!THINGSPACE_ACCOUNT_NAME) return null;
+  
+  const tokens = await getThingspaceTokens();
+  if (!tokens) return null;
+  
+  try {
+    const response = await fetch(`https://thingspace.verizon.com/api/m2m/v1/plans/${THINGSPACE_ACCOUNT_NAME}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${tokens.oauth}`,
+        'VZ-M2M-Token': tokens.session,
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (!response.ok) {
+      console.error('ThingSpace get plans error:', response.status);
+      return null;
+    }
+    
+    const data = await response.json() as any;
+    return data || [];
+  } catch (error) {
+    console.error('Error getting available plans:', error);
+    return null;
+  }
+}
+
+export interface ChangePlanResult {
+  success: boolean;
+  error?: string;
+  requestId?: string;
+}
+
+export async function changeDevicePlan(
+  identifier: string, 
+  identifierType: 'iccid' | 'imei' | 'mdn',
+  currentPlan: string,
+  newPlan: string
+): Promise<ChangePlanResult> {
+  if (!THINGSPACE_ACCOUNT_NAME) {
+    return { success: false, error: 'ThingSpace account not configured' };
+  }
+  
+  const tokens = await getThingspaceTokens();
+  if (!tokens) {
+    return { success: false, error: 'Failed to authenticate with ThingSpace' };
+  }
+  
+  try {
+    const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/plan', {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${tokens.oauth}`,
+        'VZ-M2M-Token': tokens.session,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountName: THINGSPACE_ACCOUNT_NAME,
+        devices: [
+          {
+            deviceIds: [
+              {
+                id: identifier,
+                kind: identifierType
+              }
+            ]
+          }
+        ],
+        servicePlan: newPlan,
+        currentServicePlan: currentPlan
+      })
+    });
+    
+    const responseText = await response.text();
+    console.log('ThingSpace change plan response:', response.status, responseText);
+    
+    if (!response.ok) {
+      let errorMessage = `ThingSpace API error: ${response.status}`;
+      try {
+        const errorData = JSON.parse(responseText);
+        if (errorData.errorMessage) {
+          errorMessage = errorData.errorMessage;
+        }
+      } catch {}
+      return { success: false, error: errorMessage };
+    }
+    
+    const data = JSON.parse(responseText);
+    return { 
+      success: true, 
+      requestId: data.requestId
+    };
+  } catch (error: any) {
+    console.error('Error changing device plan:', error);
+    return { success: false, error: error.message || 'Failed to change plan' };
+  }
+}
