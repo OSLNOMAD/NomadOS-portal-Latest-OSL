@@ -881,7 +881,7 @@ void collectibleInvoices.length
                         <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Total</th>
                         <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Paid</th>
                         <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Due</th>
-                        <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase">Action</th>
+                        <th className="text-center px-4 py-3 text-xs font-medium text-muted uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -904,20 +904,44 @@ void collectibleInvoices.length
                           <td className={`px-4 py-4 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
                             {formatCurrency(inv.amountDue)}
                           </td>
-                          <td className="px-4 py-4 text-right">
-                            {inv.amountDue > 0 && isInvoiceCollectible(inv.status) ? (
+                          <td className="px-4 py-4">
+                            <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => handleCollectPayment(inv.id)}
-                                disabled={paymentLoading === inv.id}
-                                className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                                onClick={async () => {
+                                  try {
+                                    const token = localStorage.getItem('auth_token')
+                                    const response = await fetch(`/api/billing/invoice/${inv.id}/pdf`, {
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    })
+                                    if (response.ok) {
+                                      const data = await response.json()
+                                      window.open(data.downloadUrl, '_blank')
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to download invoice:', err)
+                                  }
+                                }}
+                                className="p-1.5 text-gray-500 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+                                title="Download PDF"
                               >
-                                {paymentLoading === inv.id ? '...' : 'Pay Now'}
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
                               </button>
-                            ) : inv.amountDue > 0 ? (
-                              <span className="text-xs text-yellow-600">Pending</span>
-                            ) : (
-                              <span className="text-xs text-green-600">Paid</span>
-                            )}
+                              {inv.amountDue > 0 && isInvoiceCollectible(inv.status) ? (
+                                <button
+                                  onClick={() => handleCollectPayment(inv.id)}
+                                  disabled={paymentLoading === inv.id}
+                                  className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                                >
+                                  {paymentLoading === inv.id ? '...' : 'Pay Now'}
+                                </button>
+                              ) : inv.amountDue > 0 ? (
+                                <span className="text-xs text-yellow-600">Pending</span>
+                              ) : (
+                                <span className="text-xs text-green-600">Paid</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

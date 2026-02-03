@@ -1272,6 +1272,23 @@ export async function collectPaymentForInvoice(invoiceId: string): Promise<{ suc
   }
 }
 
+export async function getInvoicePdfUrl(invoiceId: string): Promise<{ url: string; validTill: string } | null> {
+  try {
+    const result = await chargebeeApiPost(`/invoices/${invoiceId}/pdf`, {});
+    
+    if (result?.download?.download_url) {
+      return { 
+        url: result.download.download_url,
+        validTill: result.download.valid_till ? new Date(result.download.valid_till * 1000).toISOString() : ''
+      };
+    }
+    return null;
+  } catch (error: any) {
+    console.error('Error getting invoice PDF URL:', error);
+    return null;
+  }
+}
+
 export interface ResumeDeviceResult {
   success: boolean;
   requestId?: string;

@@ -67,3 +67,9 @@ The design adheres to official Nomad Internet branding, featuring a modern SaaS 
   - Fixed dropdown overflow issue - now appears above the button instead of being cut off
   - Changed positioning from `mt-2` (top) to `bottom-full mb-2` (above button)
   - Increased z-index to 50 for proper layering
+- Feb 3, 2026: Invoice PDF Download
+  - Added download button for each invoice in the Invoices tab
+  - Uses Chargebee API endpoint POST /invoices/{id}/pdf to generate download URLs
+  - Backend API: GET /api/billing/invoice/:invoiceId/pdf
+  - Opens PDF in new browser tab for download
+  - Security: Validates invoice belongs to authenticated customer
