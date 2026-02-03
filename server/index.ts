@@ -1139,6 +1139,104 @@ app.post("/api/device/status", async (req, res) => {
   }
 });
 
+app.post("/api/device/activate-line", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | null = null;
+    let customerId: number | null = null;
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+        customerEmail = decoded.email;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+      customerId = customer.id;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Could not determine customer" });
+    }
+
+    const { 
+      imei, 
+      iccid, 
+      subscriptionId, 
+      subscriptionStatus,
+      chargebeeCustomerId,
+      customerFirstName,
+      customerLastName,
+      inGracePeriod,
+      dueInvoicesCount,
+      totalDues,
+      notificationEmail 
+    } = req.body;
+
+    if (!iccid && !imei) {
+      return res.status(400).json({ error: "ICCID or IMEI is required" });
+    }
+
+    const webhookPayload = {
+      imei: imei || "",
+      iccid: iccid || "",
+      customerEmail: notificationEmail || customerEmail,
+      subscriptionId: subscriptionId || "",
+      subscriptionStatus: subscriptionStatus || "unknown",
+      customerId: chargebeeCustomerId || String(customerId || ""),
+      customerFirstName: customerFirstName || "",
+      customerLastName: customerLastName || "",
+      inGracePeriod: inGracePeriod || false,
+      dueInvoicesCount: dueInvoicesCount || 0,
+      totalDues: totalDues || 0,
+      lineState: "not_found",
+      source: "customer_portal_troubleshoot"
+    };
+
+    console.log("Sending activate line webhook:", webhookPayload);
+
+    const response = await fetch("https://app.lrlos.com/webhook/botpress/activateline", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Activate line webhook error:", errorText);
+      return res.status(500).json({ error: "Failed to submit activation request" });
+    }
+
+    res.json({ 
+      success: true, 
+      message: "Line activation request submitted",
+      notificationEmail: notificationEmail || customerEmail
+    });
+  } catch (error: any) {
+    console.error("Activate line error:", error);
+    res.status(500).json({ error: error.message || "Failed to submit activation request" });
+  }
+});
+
 app.get("/api/device/plans", async (req, res) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");

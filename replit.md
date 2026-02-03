@@ -219,3 +219,7 @@ npm run db:push  # Push database schema
   - Troubleshoot button in Internet tab navigates to /troubleshoot with subscription context (ICCID, IMEI, MDN)
   - Supports fallback identifiers: uses ICCID first, then IMEI, then MDN
   - Normalized status handling from both device.carrier.state and device.state
+  - "No line found" handling: when device returns 404, shows activation request form
+  - Customer can optionally enter alternate email for notifications
+  - Sends activation request to external webhook (app.lrlos.com) with full customer context
+  - API endpoint: POST /api/device/activate-line

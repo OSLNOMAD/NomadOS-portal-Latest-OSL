@@ -12,6 +12,8 @@ type TroubleshootStep =
   | 'rechecking_extended'
   | 'success'
   | 'escalated'
+  | 'no_line'
+  | 'no_line_submitted'
   | 'error';
 
 export default function Troubleshoot() {
@@ -30,6 +32,10 @@ export default function Troubleshoot() {
   const [lineStatus, setLineStatus] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [customerEmail, setCustomerEmail] = useState<string>('');
+  const [alternateEmail, setAlternateEmail] = useState<string>('');
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasInitialized = useRef(false);
@@ -47,9 +53,9 @@ export default function Troubleshoot() {
     return status.toLowerCase().replace(/[-_\s]/g, '');
   };
 
-  const checkLineStatus = useCallback(async (): Promise<string | null> => {
+  const checkLineStatus = useCallback(async (): Promise<{ status: string | null; notFound: boolean }> => {
     const token = getToken();
-    if (!token || !identifier) return null;
+    if (!token || !identifier) return { status: null, notFound: false };
 
     try {
       const response = await fetch('/api/device/status', {
@@ -64,6 +70,10 @@ export default function Troubleshoot() {
         })
       });
 
+      if (response.status === 404) {
+        return { status: null, notFound: true };
+      }
+
       if (!response.ok) {
         throw new Error('Failed to get device status');
       }
@@ -71,12 +81,85 @@ export default function Troubleshoot() {
       const data = await response.json();
       const status = (data.device?.carrier?.state || data.device?.state || '').toLowerCase() || null;
       setLineStatus(status);
-      return status;
+      return { status, notFound: false };
     } catch (err: any) {
       console.error('Status check error:', err);
-      return null;
+      return { status: null, notFound: false };
     }
   }, [identifier, identifierType]);
+
+  const fetchCustomerData = async () => {
+    const token = getToken();
+    if (!token) return null;
+
+    try {
+      const response = await fetch('/api/customer/full-data', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      setCustomerEmail(data.chargebee?.customers?.[0]?.customer?.email || '');
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch customer data:', err);
+      return null;
+    }
+  };
+
+  const submitActivateLine = async (notificationEmail?: string) => {
+    const token = getToken();
+    if (!token) return false;
+
+    setIsSubmitting(true);
+
+    try {
+      const customerData = subscriptionData || await fetchCustomerData();
+      const customer = customerData?.chargebee?.customers?.[0]?.customer;
+      const subscription = customerData?.chargebee?.customers?.[0]?.subscriptions?.find(
+        (sub: any) => sub.subscription?.id === subscriptionId
+      )?.subscription;
+
+      const response = await fetch('/api/device/activate-line', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          imei: imei || '',
+          iccid: iccid || '',
+          subscriptionId: subscriptionId || '',
+          subscriptionStatus: subscription?.status || 'unknown',
+          chargebeeCustomerId: customer?.id || '',
+          customerFirstName: customer?.first_name || '',
+          customerLastName: customer?.last_name || '',
+          inGracePeriod: false,
+          dueInvoicesCount: 0,
+          totalDues: 0,
+          notificationEmail: notificationEmail || undefined
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit activation request');
+      }
+
+      const result = await response.json();
+      setCustomerEmail(result.notificationEmail || customerEmail);
+      setStep('no_line_submitted');
+      return true;
+    } catch (err) {
+      console.error('Activate line error:', err);
+      setError('Failed to submit your request. Please try again.');
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const resumeLine = async (): Promise<boolean> => {
     const token = getToken();
@@ -112,7 +195,15 @@ export default function Troubleshoot() {
   const handleExtendedRecheck = useCallback(async () => {
     clearTimer();
     setStep('rechecking_extended');
-    const status = await checkLineStatus();
+    const { status, notFound } = await checkLineStatus();
+    
+    if (notFound) {
+      const customerData = await fetchCustomerData();
+      setSubscriptionData(customerData);
+      setStep('no_line');
+      return;
+    }
+    
     const normalized = normalizeStatus(status);
 
     if (normalized === 'active') {
@@ -140,7 +231,15 @@ export default function Troubleshoot() {
   const handleFirstRecheck = useCallback(async () => {
     clearTimer();
     setStep('rechecking_first');
-    const status = await checkLineStatus();
+    const { status, notFound } = await checkLineStatus();
+    
+    if (notFound) {
+      const customerData = await fetchCustomerData();
+      setSubscriptionData(customerData);
+      setStep('no_line');
+      return;
+    }
+    
     const normalized = normalizeStatus(status);
 
     if (normalized === 'active') {
@@ -182,7 +281,15 @@ export default function Troubleshoot() {
     hasInitialized.current = true;
 
     const init = async () => {
-      const status = await checkLineStatus();
+      const { status, notFound } = await checkLineStatus();
+      
+      if (notFound) {
+        const customerData = await fetchCustomerData();
+        setSubscriptionData(customerData);
+        setStep('no_line');
+        return;
+      }
+      
       const normalized = normalizeStatus(status);
 
       if (normalized === 'active') {
@@ -460,6 +567,91 @@ export default function Troubleshoot() {
                   Call Support
                 </a>
               </div>
+            </motion.div>
+          )}
+
+          {step === 'no_line' && (
+            <motion.div
+              key="no_line"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center py-8"
+            >
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: '#10a37f20' }}>
+                <svg className="w-8 h-8" style={{ color: '#10a37f' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium" style={{ color: '#0f172a' }}>Activating Your Line</p>
+              <p className="text-gray-500 mt-2 mb-6">
+                Your internet line needs to be activated. This process typically takes 20-30 minutes.<br/>
+                We'll send you an email once your issue is sorted out.
+              </p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 text-left">
+                <p className="text-sm text-gray-600 mb-2">We will send notification to:</p>
+                <p className="font-medium" style={{ color: '#0f172a' }}>{customerEmail || 'Loading...'}</p>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-sm text-gray-500 mb-2">If you'd like us to notify you on a different email:</p>
+                <input
+                  type="email"
+                  value={alternateEmail}
+                  onChange={(e) => setAlternateEmail(e.target.value)}
+                  placeholder="Enter different email (optional)"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+
+              <button
+                onClick={() => submitActivateLine(alternateEmail || undefined)}
+                disabled={isSubmitting}
+                className="w-full px-6 py-3 rounded-lg text-white font-medium transition-all hover:shadow-lg disabled:opacity-50"
+                style={{ backgroundColor: '#10a37f' }}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Request'}
+              </button>
+
+              {error && (
+                <p className="text-red-500 text-sm mt-4">{error}</p>
+              )}
+            </motion.div>
+          )}
+
+          {step === 'no_line_submitted' && (
+            <motion.div
+              key="no_line_submitted"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-center py-8"
+            >
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: '#10a37f20' }}>
+                <svg className="w-8 h-8" style={{ color: '#10a37f' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium" style={{ color: '#0f172a' }}>Request Submitted</p>
+              <p className="text-gray-500 mt-2 mb-6">
+                Your line activation request has been submitted. This process typically takes 20-30 minutes.<br/>
+                We'll send you an email at <span className="font-medium">{customerEmail}</span> once your issue is sorted out.
+              </p>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-green-700">
+                  You don't need to stay on this page. We'll notify you by email when your internet is ready.
+                </p>
+              </div>
+
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="px-6 py-3 rounded-lg text-white font-medium transition-all hover:shadow-lg"
+                style={{ backgroundColor: '#10a37f' }}
+              >
+                Back to Dashboard
+              </button>
             </motion.div>
           )}
 
