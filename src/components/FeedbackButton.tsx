@@ -72,10 +72,10 @@ export function FeedbackButton({ token }: FeedbackButtonProps) {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 z-40 px-4 py-3 rounded-full shadow-lg text-white font-medium flex items-center gap-2 transition-all hover:shadow-xl hover:scale-105"
+        className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-40 px-3 py-2 sm:px-4 sm:py-3 rounded-full shadow-lg text-white font-medium flex items-center gap-2 transition-all hover:shadow-xl hover:scale-105 text-sm sm:text-base"
         style={{ backgroundColor: '#10a37f' }}
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
         </svg>
         <span className="hidden sm:inline">Submit Feedback</span>

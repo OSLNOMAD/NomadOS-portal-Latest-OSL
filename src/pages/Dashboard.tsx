@@ -872,7 +872,76 @@ void collectibleInvoices.length
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-text">Invoices & Transactions</h2>
                 
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+                {/* Mobile Card View */}
+                <div className="mobile-card-list space-y-3">
+                  {allInvoices.map((inv) => (
+                    <div key={inv.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="font-medium text-text text-sm">{inv.id}</p>
+                          <p className="text-xs text-muted">{formatDate(inv.date)}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
+                          {inv.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center border-t border-gray-100 pt-3 mb-3">
+                        <div>
+                          <p className="text-xs text-muted">Total</p>
+                          <p className="font-medium text-sm">{formatCurrency(inv.total)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted">Paid</p>
+                          <p className="font-medium text-sm text-green-600">{formatCurrency(inv.amountPaid)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted">Due</p>
+                          <p className={`font-medium text-sm ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>{formatCurrency(inv.amountDue)}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const token = localStorage.getItem('auth_token')
+                              const response = await fetch(`/api/billing/invoice/${inv.id}/pdf`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                              })
+                              if (response.ok) {
+                                const data = await response.json()
+                                window.open(data.downloadUrl, '_blank')
+                              }
+                            } catch (err) {
+                              console.error('Failed to download invoice:', err)
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          PDF
+                        </button>
+                        {inv.amountDue > 0 && isInvoiceCollectible(inv.status) ? (
+                          <button
+                            onClick={() => handleCollectPayment(inv.id)}
+                            disabled={paymentLoading === inv.id}
+                            className="flex-1 px-3 py-2 text-xs font-medium text-white bg-primary rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                          >
+                            {paymentLoading === inv.id ? '...' : 'Pay Now'}
+                          </button>
+                        ) : inv.amountDue > 0 ? (
+                          <span className="flex-1 px-3 py-2 text-xs text-center text-yellow-600 bg-yellow-50 rounded-lg">Pending</span>
+                        ) : (
+                          <span className="flex-1 px-3 py-2 text-xs text-center text-green-600 bg-green-50 rounded-lg">Paid</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Desktop Table View */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto mobile-hidden">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
@@ -952,7 +1021,36 @@ void collectibleInvoices.length
                 
                 
                 <h3 className="text-lg font-semibold text-text mt-8">Transaction History</h3>
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                
+                {/* Mobile Card View for Transactions */}
+                <div className="mobile-card-list space-y-3">
+                  {allTransactions.map((txn) => (
+                    <div key={txn.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="font-mono text-xs text-text break-all">{txn.id}</p>
+                          <p className="text-xs text-muted mt-1">{formatDate(txn.date)}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(txn.status)}`}>
+                          {txn.status}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-gray-100 pt-3 mt-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted">Type:</span>
+                          <span className="text-sm capitalize">{txn.type}</span>
+                        </div>
+                        <p className="font-bold text-primary">{formatCurrency(txn.amount)}</p>
+                      </div>
+                      {txn.errorCode && (
+                        <p className="text-xs text-red-600 mt-2">Error: {txn.errorCode}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Desktop Table View for Transactions */}
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mobile-hidden">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
@@ -1350,152 +1448,211 @@ void collectibleInvoices.length
       )}
 
       {selectedSubscription && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-text">Subscription Details</h2>
-                <p className="text-sm text-muted">{getPlanDisplayName(selectedSubscription.subscription.planId)}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-text truncate">Subscription Details</h2>
+                <p className="text-xs sm:text-sm text-muted truncate">{getPlanDisplayName(selectedSubscription.subscription.planId)}</p>
               </div>
               <button
                 onClick={() => setSelectedSubscription(null)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 ml-2"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-120px)]">
+              <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
                   <div>
-                    <p className="text-muted">Status</p>
+                    <p className="text-xs text-muted">Status</p>
                     <span className={`inline-block px-2 py-0.5 text-xs rounded-full ${getStatusColor(selectedSubscription.subscription.status)}`}>
                       {selectedSubscription.subscription.status}
                     </span>
                   </div>
                   <div>
-                    <p className="text-muted">Amount</p>
-                    <p className="font-bold text-primary">{formatCurrency(selectedSubscription.subscription.planAmount)}/{selectedSubscription.subscription.billingPeriodUnit}</p>
+                    <p className="text-xs text-muted">Amount</p>
+                    <p className="font-bold text-primary text-sm">{formatCurrency(selectedSubscription.subscription.planAmount)}/{selectedSubscription.subscription.billingPeriodUnit}</p>
                   </div>
                   <div>
-                    <p className="text-muted">Next Billing</p>
-                    <p className="font-medium">{formatDate(selectedSubscription.subscription.nextBillingAt)}</p>
+                    <p className="text-xs text-muted">Next Billing</p>
+                    <p className="font-medium text-sm">{formatDate(selectedSubscription.subscription.nextBillingAt)}</p>
                   </div>
                   <div>
-                    <p className="text-muted">Amount Due</p>
-                    <p className={`font-bold ${selectedSubscription.subscription.totalDues > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <p className="text-xs text-muted">Amount Due</p>
+                    <p className={`font-bold text-sm ${selectedSubscription.subscription.totalDues > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatCurrency(selectedSubscription.subscription.totalDues)}
                     </p>
                   </div>
                 </div>
 
                 {selectedSubscription.subscription.totalDues > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 flex gap-3">
+                  <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col sm:flex-row gap-2 sm:gap-3">
                     <button
                       onClick={() => handlePayNow(selectedSubscription.customerId)}
                       disabled={paymentLoading === 'pay'}
-                      className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                      className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
                       {paymentLoading === 'pay' ? 'Loading...' : `Pay Now ${formatCurrency(selectedSubscription.subscription.totalDues)}`}
                     </button>
                     <button
                       onClick={() => handleUpdatePaymentMethod(selectedSubscription.customerId)}
                       disabled={paymentLoading === 'update'}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                     >
-                      {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
+                      {paymentLoading === 'update' ? 'Loading...' : 'Update Payment'}
                     </button>
                   </div>
                 )}
               </div>
 
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-text mb-4">Invoices for this Subscription</h3>
+              <div className="mb-4 sm:mb-6">
+                <h3 className="text-base sm:text-lg font-semibold text-text mb-3 sm:mb-4">Invoices for this Subscription</h3>
                 {selectedSubscription.invoices.length > 0 ? (
-                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Invoice</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
-                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Total</th>
-                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Due</th>
-                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {selectedSubscription.invoices.map((inv) => (
-                          <tr key={inv.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-text">{inv.id}</td>
-                            <td className="px-4 py-3 text-sm text-muted">{formatDate(inv.date)}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
-                                {inv.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(inv.total)}</td>
-                            <td className={`px-4 py-3 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
-                              {formatCurrency(inv.amountDue)}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {inv.amountDue > 0 && isInvoiceCollectible(inv.status) ? (
-                                <button
-                                  onClick={() => handleCollectPayment(inv.id)}
-                                  disabled={paymentLoading === inv.id}
-                                  className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
-                                >
-                                  {paymentLoading === inv.id ? '...' : 'Pay'}
-                                </button>
-                              ) : inv.amountDue > 0 ? (
-                                <span className="text-xs text-yellow-600">Pending</span>
-                              ) : null}
-                            </td>
+                  <>
+                    {/* Mobile Card View */}
+                    <div className="space-y-2 sm:hidden">
+                      {selectedSubscription.invoices.map((inv) => (
+                        <div key={inv.id} className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-medium text-xs text-text">{inv.id}</p>
+                              <p className="text-xs text-muted">{formatDate(inv.date)}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
+                              {inv.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="flex gap-4 text-xs">
+                              <span>Total: <strong>{formatCurrency(inv.total)}</strong></span>
+                              <span className={inv.amountDue > 0 ? 'text-red-600' : ''}>Due: <strong>{formatCurrency(inv.amountDue)}</strong></span>
+                            </div>
+                            {inv.amountDue > 0 && isInvoiceCollectible(inv.status) && (
+                              <button
+                                onClick={() => handleCollectPayment(inv.id)}
+                                disabled={paymentLoading === inv.id}
+                                className="px-2 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                              >
+                                {paymentLoading === inv.id ? '...' : 'Pay'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Desktop Table View */}
+                    <div className="hidden sm:block bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Invoice</th>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
+                            <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Total</th>
+                            <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Due</th>
+                            <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Action</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {selectedSubscription.invoices.map((inv) => (
+                            <tr key={inv.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-text">{inv.id}</td>
+                              <td className="px-4 py-3 text-sm text-muted">{formatDate(inv.date)}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(inv.status)}`}>
+                                  {inv.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(inv.total)}</td>
+                              <td className={`px-4 py-3 text-sm text-right font-medium ${inv.amountDue > 0 ? 'text-red-600' : ''}`}>
+                                {formatCurrency(inv.amountDue)}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {inv.amountDue > 0 && isInvoiceCollectible(inv.status) ? (
+                                  <button
+                                    onClick={() => handleCollectPayment(inv.id)}
+                                    disabled={paymentLoading === inv.id}
+                                    className="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-accent transition-colors disabled:opacity-50"
+                                  >
+                                    {paymentLoading === inv.id ? '...' : 'Pay'}
+                                  </button>
+                                ) : inv.amountDue > 0 ? (
+                                  <span className="text-xs text-yellow-600">Pending</span>
+                                ) : null}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 ) : (
                   <p className="text-muted text-sm">No invoices found for this subscription</p>
                 )}
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold text-text mb-4">Transactions for this Subscription</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-text mb-3 sm:mb-4">Transactions for this Subscription</h3>
                 {selectedSubscription.transactions.length > 0 ? (
-                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Type</th>
-                          <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
-                          <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {selectedSubscription.transactions.map((txn) => (
-                          <tr key={txn.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-muted">{formatDate(txn.date)}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-text">{txn.type}</td>
-                            <td className="px-4 py-3">
+                  <>
+                    {/* Mobile Card View */}
+                    <div className="space-y-2 sm:hidden">
+                      {selectedSubscription.transactions.map((txn) => (
+                        <div key={txn.id} className="bg-gray-50 rounded-lg p-3">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-xs text-muted">{formatDate(txn.date)}</p>
+                              <p className="text-sm font-medium text-text capitalize">{txn.type}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-primary">{formatCurrency(txn.amount)}</p>
                               <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(txn.status)}`}>
                                 {txn.status}
                               </span>
-                              {txn.errorCode && (
-                                <span className="ml-2 text-xs text-red-600">({txn.errorCode})</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(txn.amount)}</td>
+                            </div>
+                          </div>
+                          {txn.errorCode && (
+                            <p className="text-xs text-red-600 mt-1">Error: {txn.errorCode}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Desktop Table View */}
+                    <div className="hidden sm:block bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Date</th>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Type</th>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-muted uppercase">Status</th>
+                            <th className="text-right px-4 py-2 text-xs font-medium text-muted uppercase">Amount</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {selectedSubscription.transactions.map((txn) => (
+                            <tr key={txn.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm text-muted">{formatDate(txn.date)}</td>
+                              <td className="px-4 py-3 text-sm font-medium text-text">{txn.type}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(txn.status)}`}>
+                                  {txn.status}
+                                </span>
+                                {txn.errorCode && (
+                                  <span className="ml-2 text-xs text-red-600">({txn.errorCode})</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(txn.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 ) : (
                   <p className="text-muted text-sm">No transactions found for this subscription</p>
                 )}

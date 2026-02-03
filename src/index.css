@@ -1085,3 +1085,148 @@ body {
   font-size: 20px;
   font-weight: 600;
 }
+
+/* =========================
+   MOBILE RESPONSIVE STYLES
+========================= */
+
+/* Hide tables on mobile, show card layout - using 640px to match Tailwind sm: */
+@media (max-width: 639px) {
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  .mobile-card-list {
+    display: block !important;
+  }
+  
+  /* Dashboard layout adjustments */
+  .dashboard-layout header h1 {
+    font-size: 1rem;
+  }
+  
+  /* Modal mobile optimization */
+  .modal-mobile-full {
+    max-width: 100% !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    height: 100vh !important;
+  }
+  
+  /* Invoice/transaction cards on mobile */
+  .invoice-card-mobile {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  
+  .invoice-card-mobile .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  
+  .invoice-card-mobile .card-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid #f3f4f6;
+  }
+  
+  .invoice-card-mobile .card-row:first-child {
+    border-top: none;
+  }
+  
+  .invoice-card-mobile .card-label {
+    color: #6b7280;
+    font-size: 13px;
+  }
+  
+  .invoice-card-mobile .card-value {
+    font-weight: 500;
+    font-size: 14px;
+    text-align: right;
+  }
+  
+  /* Fix button stacking on mobile */
+  .mobile-button-stack {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  
+  .mobile-button-stack button {
+    width: 100% !important;
+  }
+  
+  /* Troubleshoot page mobile */
+  .troubleshoot-container {
+    padding: 16px !important;
+  }
+  
+  .troubleshoot-card {
+    padding: 20px !important;
+    margin: 0 !important;
+  }
+  
+  /* Auth layout mobile - stack vertically */
+  .auth-layout {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .auth-left {
+    display: none !important;
+  }
+  
+  .auth-right {
+    min-height: 100vh;
+    padding: 20px !important;
+  }
+  
+  .auth-card {
+    padding: 24px !important;
+    border-radius: 16px !important;
+  }
+  
+  .auth-title {
+    font-size: 28px !important;
+  }
+  
+  /* Settings page mobile */
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Desktop table visibility - 640px+ matches Tailwind sm: */
+@media (min-width: 640px) {
+  .desktop-hidden {
+    display: none !important;
+  }
+  
+  .mobile-card-list {
+    display: none !important;
+  }
+}
+
+/* Tablet optimizations */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .tablet-stack {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 380px) {
+  .xs-text-sm {
+    font-size: 12px !important;
+  }
+  
+  .xs-p-3 {
+    padding: 12px !important;
+  }
+}

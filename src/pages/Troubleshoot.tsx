@@ -423,20 +423,20 @@ export default function Troubleshoot() {
     : 0;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#f7faf9' }}>
+    <div className="min-h-screen flex items-center justify-center p-3 sm:p-4" style={{ backgroundColor: '#f7faf9' }}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8"
+        className="w-full max-w-lg bg-white rounded-xl sm:rounded-2xl shadow-xl p-5 sm:p-8"
       >
-        <div className="flex items-center justify-center mb-6">
-          <img src="/logo.svg" alt="Nomad Internet" className="h-10" />
+        <div className="flex items-center justify-center mb-4 sm:mb-6">
+          <img src="/logo.svg" alt="Nomad Internet" className="h-8 sm:h-10" />
         </div>
 
-        <h1 className="text-2xl font-bold text-center mb-2" style={{ color: '#0f172a' }}>
+        <h1 className="text-xl sm:text-2xl font-bold text-center mb-2" style={{ color: '#0f172a' }}>
           Internet Troubleshooting
         </h1>
-        <p className="text-center text-gray-500 mb-8">
+        <p className="text-center text-gray-500 mb-6 sm:mb-8 text-sm sm:text-base">
           {subscriptionId && `Subscription: ${subscriptionId.substring(0, 12)}...`}
         </p>
 
