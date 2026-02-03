@@ -1147,6 +1147,7 @@ void collectibleInvoices.length
                   <button
                     onClick={() => fetchFullData()}
                     disabled={isLoadingData}
+                    title="Refresh data from all systems"
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors disabled:opacity-50"
                   >
                     <svg className={`w-4 h-4 ${isLoadingData ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
