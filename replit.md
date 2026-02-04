@@ -40,12 +40,15 @@ The design adheres to official Nomad Internet branding, featuring a modern SaaS 
 ## Recent Changes
 - Feb 4, 2026: Cancellation & Retention Flow
   - Multi-step cancellation modal with reason selection (too expensive, slow speeds, not reliable, no longer needed, moving, other)
-  - Intelligent flows based on reason: price negotiation for "too expensive", troubleshooting offer for speed/reliability issues
+  - Intelligent flows based on reason: price negotiation for "too expensive", troubleshooting offer for speed/reliability issues (active subscriptions only)
   - Retention offers: 20% off for 2 months or $20 off for 1 month based on target price
+  - 2-month cooldown for discount offers - customers who accepted a discount cannot receive another for 2 months
+  - Unpaid subscriptions (non_renewing, cancelled, paused) skip troubleshooting step since remote troubleshooting is not possible
   - Contact preference collection (email or phone with callback time)
-  - Zendesk ticket creation assigned to "Retention & Cancellations" group (ID: 41909825396372)
-  - Slack notification posting with customer details, reason, and ticket ID
-  - Database tables: `cancellation_requests` for tracking flow state, `portal_settings` for configuration
+  - Zendesk ticket creation assigned to "Retention & Cancellations" group (ID: 41909825396372) with detailed formatting
+  - Ticket clearly states discount status: ACCEPTED, DECLINED, NOT ELIGIBLE (2-month cooldown), or N/A
+  - Slack notification posting with customer details, reason, price, discount status, and clickable ticket link
+  - Database tables: `cancellation_requests` for tracking flow state (includes discountEligible, discountAppliedAt), `portal_settings` for configuration
   - Admin Dashboard settings tab for updating Slack Channel ID
   - API endpoints: /api/cancellation/* for flow management, /api/admin/settings for portal configuration
 - Feb 4, 2026: Customer Feedback Display & Activation Message
