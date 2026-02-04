@@ -764,7 +764,7 @@ export default function Troubleshoot() {
               
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-gray-600">
-                  <strong>Still not working?</strong> If rebooting didn't help, please contact our support team at <a href="tel:+18447677770" className="font-medium" style={{ color: '#10a37f' }}>1-844-767-7770</a> or use the chat feature on your dashboard.
+                  <strong>Still not working?</strong> If rebooting didn't help, please contact our support team at <a href="tel:+1218001000" className="font-medium" style={{ color: '#10a37f' }}>+1218001000</a> or use the chat feature on your dashboard.
                 </p>
               </div>
               
