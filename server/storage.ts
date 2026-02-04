@@ -1,6 +1,6 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser } from "../shared/schema";
 import { db } from "./db";
-import { eq, and, gt, or } from "drizzle-orm";
+import { eq, and, gt, or, desc } from "drizzle-orm";
 
 export interface IStorage {
   getCustomer(id: number): Promise<Customer | undefined>;
