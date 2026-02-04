@@ -2210,6 +2210,615 @@ app.post("/api/admin/feedback/:id/respond", async (req, res) => {
   }
 });
 
+app.post("/api/cancellation/start", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { subscriptionId, subscriptionStatus, currentPrice } = req.body;
+    if (!subscriptionId) {
+      return res.status(400).json({ error: "Subscription ID is required" });
+    }
+
+    const customer = await storage.getCustomerByEmail(customerEmail);
+    
+    const cancellationRequest = await storage.createCancellationRequest({
+      customerId: customer?.id,
+      customerEmail,
+      subscriptionId,
+      subscriptionStatus,
+      currentPrice,
+      status: "started",
+      flowStep: "reason_selection"
+    });
+
+    res.json({ success: true, requestId: cancellationRequest.id });
+  } catch (error: any) {
+    console.error("Start cancellation error:", error);
+    res.status(500).json({ error: error.message || "Failed to start cancellation flow" });
+  }
+});
+
+app.post("/api/cancellation/submit-reason", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId, reason, reasonDetails } = req.body;
+    if (!requestId || !reason) {
+      return res.status(400).json({ error: "Request ID and reason are required" });
+    }
+
+    const request = await storage.getCancellationRequest(requestId);
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    let nextStep = "retention_offer";
+    if (reason === "too_expensive") {
+      nextStep = "price_negotiation";
+    } else if (reason === "slow_speeds" || reason === "not_reliable") {
+      nextStep = "troubleshooting_offer";
+    }
+
+    await storage.updateCancellationRequest(requestId, {
+      cancellationReason: reason,
+      reasonDetails,
+      flowStep: nextStep
+    });
+
+    res.json({ success: true, nextStep, reason });
+  } catch (error: any) {
+    console.error("Submit reason error:", error);
+    res.status(500).json({ error: error.message || "Failed to submit reason" });
+  }
+});
+
+app.post("/api/cancellation/submit-target-price", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId, targetPrice } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: "Request ID is required" });
+    }
+
+    const request = await storage.getCancellationRequest(requestId);
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    let retentionOffer: { type: string; description: string; discountAmount: number; newPrice: number; duration: string } | null = null;
+    const currentPrice = request.currentPrice || 9995;
+    
+    if (targetPrice && targetPrice > 0) {
+      const discount20 = Math.round(currentPrice * 0.8);
+      const discount20Amount = Math.round(currentPrice * 0.2);
+      
+      if (targetPrice <= discount20) {
+        retentionOffer = {
+          type: "percentage_discount",
+          description: "20% off for the next 2 months",
+          discountAmount: discount20Amount,
+          newPrice: discount20,
+          duration: "2 months"
+        };
+      } else {
+        const flatDiscount = 2000;
+        retentionOffer = {
+          type: "flat_discount",
+          description: "$20 off for the next month",
+          discountAmount: flatDiscount,
+          newPrice: currentPrice - flatDiscount,
+          duration: "1 month"
+        };
+      }
+    }
+
+    await storage.updateCancellationRequest(requestId, {
+      targetPrice,
+      retentionOfferShown: retentionOffer ? JSON.stringify(retentionOffer) : null,
+      flowStep: "retention_offer"
+    });
+
+    res.json({ success: true, retentionOffer });
+  } catch (error: any) {
+    console.error("Submit target price error:", error);
+    res.status(500).json({ error: error.message || "Failed to submit target price" });
+  }
+});
+
+app.post("/api/cancellation/respond-to-offer", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId, accepted, offerType } = req.body;
+    if (!requestId || typeof accepted !== "boolean") {
+      return res.status(400).json({ error: "Request ID and acceptance status required" });
+    }
+
+    const request = await storage.getCancellationRequest(requestId);
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    if (accepted) {
+      await storage.updateCancellationRequest(requestId, {
+        retentionOfferAccepted: true,
+        status: "retained",
+        flowStep: "completed",
+        completedAt: new Date()
+      });
+      res.json({ success: true, outcome: "retained", message: "Great! Your discount will be applied to your next invoice." });
+    } else {
+      await storage.updateCancellationRequest(requestId, {
+        retentionOfferAccepted: false,
+        flowStep: "contact_preference"
+      });
+      res.json({ success: true, nextStep: "contact_preference" });
+    }
+  } catch (error: any) {
+    console.error("Respond to offer error:", error);
+    res.status(500).json({ error: error.message || "Failed to process response" });
+  }
+});
+
+app.post("/api/cancellation/troubleshooting-response", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId, accepted } = req.body;
+    if (!requestId || typeof accepted !== "boolean") {
+      return res.status(400).json({ error: "Request ID and acceptance status required" });
+    }
+
+    const request = await storage.getCancellationRequest(requestId);
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    await storage.updateCancellationRequest(requestId, {
+      troubleshootingOffered: true,
+      troubleshootingAccepted: accepted,
+      flowStep: accepted ? "troubleshooting_redirect" : "retention_offer"
+    });
+
+    if (accepted) {
+      res.json({ success: true, redirect: "/troubleshoot", subscriptionId: request.subscriptionId });
+    } else {
+      res.json({ success: true, nextStep: "retention_offer" });
+    }
+  } catch (error: any) {
+    console.error("Troubleshooting response error:", error);
+    res.status(500).json({ error: error.message || "Failed to process response" });
+  }
+});
+
+app.post("/api/cancellation/submit-contact", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId, contactMethod, phone, callTime } = req.body;
+    if (!requestId || !contactMethod) {
+      return res.status(400).json({ error: "Request ID and contact method required" });
+    }
+
+    const request = await storage.getCancellationRequest(requestId);
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    await storage.updateCancellationRequest(requestId, {
+      preferredContactMethod: contactMethod,
+      preferredPhone: phone,
+      preferredCallTime: callTime,
+      flowStep: "creating_ticket"
+    });
+
+    const customer = await storage.getCustomerByEmail(customerEmail);
+
+    const zendeskSubdomain = process.env.ZENDESK_SUBDOMAIN;
+    const zendeskEmail = process.env.ZENDESK_EMAIL;
+    const zendeskToken = process.env.ZENDESK_API_TOKEN;
+    const slackToken = process.env.SLACK_BOT_TOKEN;
+
+    const groupIdSetting = await storage.getPortalSetting("zendesk_cancellation_group_id");
+    const channelIdSetting = await storage.getPortalSetting("slack_channel_id");
+
+    const groupId = groupIdSetting?.value || "41909825396372";
+    const channelId = channelIdSetting?.value || "D09CQ87C6UU";
+
+    let zendeskTicketId = null;
+    let slackMessageTs = null;
+
+    if (zendeskSubdomain && zendeskEmail && zendeskToken) {
+      try {
+        const ticketBody = {
+          ticket: {
+            subject: `Cancellation Request - ${request.subscriptionId}`,
+            comment: {
+              body: `Customer cancellation request submitted through portal.
+
+Customer Email: ${customerEmail}
+Customer Name: ${customer?.fullName || "N/A"}
+Subscription ID: ${request.subscriptionId}
+Current Price: $${((request.currentPrice || 0) / 100).toFixed(2)}
+
+Cancellation Reason: ${request.cancellationReason}
+${request.reasonDetails ? `Details: ${request.reasonDetails}` : ""}
+${request.targetPrice ? `Target Price: $${(request.targetPrice / 100).toFixed(2)}` : ""}
+
+Retention Offer Shown: ${request.retentionOfferShown || "None"}
+Retention Offer Accepted: ${request.retentionOfferAccepted === true ? "Yes" : request.retentionOfferAccepted === false ? "No" : "N/A"}
+
+Preferred Contact Method: ${contactMethod}
+${phone ? `Phone: ${phone}` : ""}
+${callTime ? `Best Time to Call: ${callTime}` : ""}`,
+              public: false
+            },
+            requester: { email: customerEmail, name: customer?.fullName || customerEmail },
+            group_id: parseInt(groupId),
+            priority: "high",
+            tags: ["cancellation", "retention", "portal"]
+          }
+        };
+
+        const zendeskResponse = await fetch(
+          `https://${zendeskSubdomain}.zendesk.com/api/v2/tickets.json`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Basic " + Buffer.from(`${zendeskEmail}/token:${zendeskToken}`).toString("base64")
+            },
+            body: JSON.stringify(ticketBody)
+          }
+        );
+
+        if (zendeskResponse.ok) {
+          const zendeskData = await zendeskResponse.json();
+          zendeskTicketId = zendeskData.ticket?.id?.toString();
+          console.log("Zendesk ticket created:", zendeskTicketId);
+        } else {
+          console.error("Zendesk ticket creation failed:", await zendeskResponse.text());
+        }
+      } catch (zendeskError) {
+        console.error("Zendesk API error:", zendeskError);
+      }
+    }
+
+    if (slackToken && channelId) {
+      try {
+        const slackMessage = {
+          channel: channelId,
+          text: `:rotating_light: *New Cancellation Request*`,
+          blocks: [
+            {
+              type: "header",
+              text: { type: "plain_text", text: "New Cancellation Request", emoji: true }
+            },
+            {
+              type: "section",
+              fields: [
+                { type: "mrkdwn", text: `*Customer:*\n${customer?.fullName || customerEmail}` },
+                { type: "mrkdwn", text: `*Email:*\n${customerEmail}` },
+                { type: "mrkdwn", text: `*Subscription:*\n${request.subscriptionId}` },
+                { type: "mrkdwn", text: `*Reason:*\n${request.cancellationReason?.replace(/_/g, " ")}` },
+                { type: "mrkdwn", text: `*Contact Method:*\n${contactMethod}` },
+                { type: "mrkdwn", text: `*Zendesk Ticket:*\n${zendeskTicketId ? `#${zendeskTicketId}` : "Failed to create"}` }
+              ]
+            },
+            {
+              type: "context",
+              elements: [
+                { type: "mrkdwn", text: `Submitted via Customer Portal • ${new Date().toLocaleString()}` }
+              ]
+            }
+          ]
+        };
+
+        const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${slackToken}`
+          },
+          body: JSON.stringify(slackMessage)
+        });
+
+        if (slackResponse.ok) {
+          const slackData = await slackResponse.json();
+          if (slackData.ok) {
+            slackMessageTs = slackData.ts;
+            console.log("Slack message sent:", slackMessageTs);
+          } else {
+            console.error("Slack API error:", slackData.error);
+          }
+        }
+      } catch (slackError) {
+        console.error("Slack API error:", slackError);
+      }
+    }
+
+    await storage.updateCancellationRequest(requestId, {
+      zendeskTicketId,
+      slackMessageTs,
+      status: "pending_callback",
+      flowStep: "completed",
+      completedAt: new Date()
+    });
+
+    res.json({
+      success: true,
+      ticketId: zendeskTicketId,
+      message: `Your cancellation request has been submitted. ${contactMethod === "phone" ? "A member of our team will call you soon." : "We'll contact you via email shortly."}`
+    });
+  } catch (error: any) {
+    console.error("Submit contact error:", error);
+    res.status(500).json({ error: error.message || "Failed to submit contact preferences" });
+  }
+});
+
+app.get("/api/cancellation/:requestId", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { requestId } = req.params;
+    const request = await storage.getCancellationRequest(parseInt(requestId));
+    
+    if (!request || request.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+      return res.status(404).json({ error: "Cancellation request not found" });
+    }
+
+    res.json({ request });
+  } catch (error: any) {
+    console.error("Get cancellation request error:", error);
+    res.status(500).json({ error: error.message || "Failed to get cancellation request" });
+  }
+});
+
+app.get("/api/admin/settings", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const settings = await storage.getAllPortalSettings();
+    res.json({ settings });
+  } catch (error: any) {
+    console.error("Get settings error:", error);
+    res.status(500).json({ error: error.message || "Failed to get settings" });
+  }
+});
+
+app.post("/api/admin/settings", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let adminEmail: string | undefined;
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      adminEmail = decoded.email;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { key, value } = req.body;
+    if (!key || !value) {
+      return res.status(400).json({ error: "Key and value are required" });
+    }
+
+    const updated = await storage.updatePortalSetting(key, value, adminEmail || "admin");
+    if (!updated) {
+      return res.status(404).json({ error: "Setting not found" });
+    }
+
+    res.json({ success: true, setting: updated });
+  } catch (error: any) {
+    console.error("Update setting error:", error);
+    res.status(500).json({ error: error.message || "Failed to update setting" });
+  }
+});
+
 app.post("/api/admin/seed", async (req, res) => {
   try {
     const { email, password, name, adminSecret } = req.body;

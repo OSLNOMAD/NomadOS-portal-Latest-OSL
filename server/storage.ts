@@ -1,4 +1,4 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gt, or, desc } from "drizzle-orm";
 
@@ -36,6 +36,15 @@ export interface IStorage {
   createAdmin(admin: InsertAdminUser): Promise<AdminUser>;
   getAllFeedback(): Promise<CustomerFeedback[]>;
   updateFeedbackResponse(id: number, response: string, respondedBy: string): Promise<CustomerFeedback | undefined>;
+  
+  getPortalSetting(key: string): Promise<PortalSetting | undefined>;
+  updatePortalSetting(key: string, value: string, updatedBy: string): Promise<PortalSetting | undefined>;
+  getAllPortalSettings(): Promise<PortalSetting[]>;
+  
+  createCancellationRequest(request: InsertCancellationRequest): Promise<CancellationRequest>;
+  getCancellationRequest(id: number): Promise<CancellationRequest | undefined>;
+  updateCancellationRequest(id: number, data: Partial<InsertCancellationRequest>): Promise<CancellationRequest | undefined>;
+  getCancellationRequestsByCustomer(customerEmail: string): Promise<CancellationRequest[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -254,6 +263,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(customerFeedback.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  async getPortalSetting(key: string): Promise<PortalSetting | undefined> {
+    const [setting] = await db.select().from(portalSettings).where(eq(portalSettings.key, key));
+    return setting || undefined;
+  }
+
+  async updatePortalSetting(key: string, value: string, updatedBy: string): Promise<PortalSetting | undefined> {
+    const [updated] = await db
+      .update(portalSettings)
+      .set({ value, updatedAt: new Date(), updatedBy })
+      .where(eq(portalSettings.key, key))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getAllPortalSettings(): Promise<PortalSetting[]> {
+    return await db.select().from(portalSettings);
+  }
+
+  async createCancellationRequest(request: InsertCancellationRequest): Promise<CancellationRequest> {
+    const [newRequest] = await db.insert(cancellationRequests).values({
+      ...request,
+      customerEmail: request.customerEmail.toLowerCase()
+    }).returning();
+    return newRequest;
+  }
+
+  async getCancellationRequest(id: number): Promise<CancellationRequest | undefined> {
+    const [request] = await db.select().from(cancellationRequests).where(eq(cancellationRequests.id, id));
+    return request || undefined;
+  }
+
+  async updateCancellationRequest(id: number, data: Partial<InsertCancellationRequest>): Promise<CancellationRequest | undefined> {
+    const [updated] = await db
+      .update(cancellationRequests)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(cancellationRequests.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getCancellationRequestsByCustomer(customerEmail: string): Promise<CancellationRequest[]> {
+    return await db
+      .select()
+      .from(cancellationRequests)
+      .where(eq(cancellationRequests.customerEmail, customerEmail.toLowerCase()))
+      .orderBy(desc(cancellationRequests.createdAt));
   }
 }
 
