@@ -1,0 +1,197 @@
+Alright, let’s clean this up and turn it into a **clear, executable product/flow description** instead of the stream-of-consciousness version. I’ll keep it practical, not fluffy.
+
+---
+
+## Customer Portal Cancellation & Retention Flow (Proposed Design)
+
+### Context
+
+We already have a customer portal in place for Nomad Internet. What we need now is a **structured, guided cancellation flow** inside the portal that focuses on **clarity, retention, and proper escalation**, instead of letting customers cancel blindly or flood support.
+
+---
+
+## 1. Subscription Overview Page
+
+On the **Subscription page**, clearly show:
+
+* All subscriptions associated with the customer
+* Mark the **current/active subscription**
+* Display subscription status clearly:
+
+  * Active
+  * Paused
+  * Trial
+
+For any subscription that is **Active, Paused, or Trial**, show a **“Cancel Subscription”** button.
+
+---
+
+## 2. Cancel Subscription Entry Point
+
+When the customer clicks **Cancel Subscription**, do **not** cancel immediately.
+
+Instead, present a **“Why are you cancelling?”** step with predefined reasons (radio buttons or dropdown).
+Examples:
+
+* Too expensive
+* Slow speeds / performance issues
+* Internet not reliable
+* No longer needed
+* Moving / changing provider
+* Other (free-text)
+
+The customer **must select one reason** to proceed.
+
+---
+
+## 3. Reason-Based Intelligent Flows
+
+### A. Reason: “Too Expensive”
+
+1. System checks the customer’s current subscription price (e.g. $99.95).
+2. Show a retention offer:
+
+   * Example: “We may be able to reduce your monthly cost.”
+3. Ask:
+
+   * “What price would work better for you?” (input field)
+
+If the customer enters a target price:
+
+* Evaluate it against predefined discount rules.
+* Present a counter-offer:
+
+  * Example:
+
+    * 20% off next month
+    * $20 off for the next 1–2 months
+
+If customer accepts:
+
+* Apply discount
+* Keep subscription active
+* End flow successfully
+
+If customer rejects:
+
+* Move to secondary retention offer
+* If still rejected, continue cancellation flow
+
+---
+
+### B. Reason: “Slow Speeds / Internet Issues”
+
+1. Show a dialog asking for clarification:
+
+   * “Please describe the speed or connection issues you’re experiencing.”
+2. Offer troubleshooting before cancellation:
+
+   * “Would you like to try our guided troubleshooting flow?”
+
+If customer selects **Yes**:
+
+* Redirect to a **dedicated troubleshooting flow**
+* Based on outcome:
+
+  * If issue resolved → keep subscription
+  * If unresolved → continue cancellation flow
+
+If customer selects **No**:
+
+* Proceed directly to retention offers or escalation
+
+Optional retention:
+
+* Offer goodwill credit or discount (example: 20% off next month)
+
+---
+
+### C. Other Cancellation Reasons
+
+For other reasons:
+
+* Capture short explanation (optional text field)
+* Optionally show light retention offers based on reason
+* Proceed forward without blocking
+
+---
+
+## 4. Final Escalation & Human Follow-Up
+
+If the customer completes all steps and still wants to cancel:
+
+Ask for **preferred follow-up method**:
+
+* Email
+* Phone call
+
+If **phone call**:
+
+* Ask for:
+
+  * Preferred phone number
+  * Best time to call
+
+---
+
+## 5. Internal Ticket & Automation
+
+Once the flow completes:
+
+### Zendesk
+
+* Create a ticket in the **Cancellation / Retention group**
+* Include:
+
+  * Subscription ID
+  * Customer ID
+  * Cancellation reason
+  * All responses provided by the customer
+  * Preferred contact method
+* Add all captured data as **internal notes**
+
+### Slack Notification
+
+* Trigger a POST request to a backend endpoint
+* Send a Slack message including:
+
+  * Customer name
+  * Email
+  * Subscription ID
+  * Cancellation reason
+  * Zendesk ticket ID
+  * Current subscription status
+
+---
+
+## 6. Backend Endpoint
+
+* Single endpoint to receive the cancellation flow payload
+* Payload includes:
+
+  * Customer details
+  * Subscription details
+  * Selected reason
+  * Retention offers shown / accepted / rejected
+  * Zendesk ticket ID
+
+This endpoint:
+
+* Posts to Slack
+* Confirms ticket creation
+* Logs cancellation intent for analytics
+
+---
+
+## Outcome
+
+This flow:
+
+* Prevents impulsive cancellations
+* Introduces structured retention logic
+* Reduces manual support workload
+* Creates clean internal visibility (Zendesk + Slack)
+* Gives customers control without chaos
+
+This is the right way to do it.
+Anything less than this is just a “Cancel” button pretending to be a system.
