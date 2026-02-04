@@ -2210,6 +2210,113 @@ app.post("/api/admin/feedback/:id/respond", async (req, res) => {
   }
 });
 
+app.post("/api/plan-change-request", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string;
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      customerEmail = decoded.email;
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const {
+      subscriptionId,
+      currentPlanId,
+      currentPrice,
+      requestedPlanId,
+      requestedPlanName,
+      requestedPrice,
+      customerName
+    } = req.body;
+
+    if (!subscriptionId || !requestedPlanId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const slackToken = process.env.SLACK_BOT_TOKEN;
+    const targetUserId = "U05HMJ0JG79";
+
+    if (!slackToken) {
+      return res.status(500).json({ error: "Slack integration not configured" });
+    }
+
+    const currentPriceFormatted = ((currentPrice || 0) / 100).toFixed(2);
+    const requestedPriceFormatted = ((requestedPrice || 0) / 100).toFixed(2);
+    const priceDiff = (requestedPrice - currentPrice) / 100;
+    const priceChangeText = priceDiff > 0 
+      ? `+$${priceDiff.toFixed(2)}/mo (upgrade)` 
+      : priceDiff < 0 
+        ? `-$${Math.abs(priceDiff).toFixed(2)}/mo (downgrade)` 
+        : 'No change';
+
+    const slackMessage = {
+      channel: targetUserId,
+      text: `:arrows_counterclockwise: *Plan Change Request*`,
+      blocks: [
+        {
+          type: "header",
+          text: { type: "plain_text", text: "Plan Change Request", emoji: true }
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Customer:*\n${customerName || customerEmail}` },
+            { type: "mrkdwn", text: `*Email:*\n${customerEmail}` },
+            { type: "mrkdwn", text: `*Subscription:*\n${subscriptionId}` },
+            { type: "mrkdwn", text: `*Price Change:*\n${priceChangeText}` }
+          ]
+        },
+        {
+          type: "divider"
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Current Plan:*\n${currentPlanId}\n$${currentPriceFormatted}/mo` },
+            { type: "mrkdwn", text: `*Requested Plan:*\n${requestedPlanName}\n$${requestedPriceFormatted}/mo` }
+          ]
+        },
+        {
+          type: "context",
+          elements: [
+            { type: "mrkdwn", text: `Submitted via Customer Portal • ${new Date().toLocaleString()}` }
+          ]
+        }
+      ]
+    };
+
+    const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${slackToken}`
+      },
+      body: JSON.stringify(slackMessage)
+    });
+
+    const slackData = await slackResponse.json();
+    
+    if (!slackData.ok) {
+      console.error("Slack API error:", slackData.error);
+      return res.status(500).json({ error: "Failed to send request to team" });
+    }
+
+    console.log("Plan change request sent to Slack:", slackData.ts);
+    res.json({ success: true, message: "Plan change request submitted" });
+  } catch (error: any) {
+    console.error("Plan change request error:", error);
+    res.status(500).json({ error: error.message || "Failed to submit request" });
+  }
+});
+
 app.post("/api/cancellation/start", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
