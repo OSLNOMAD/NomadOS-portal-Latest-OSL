@@ -178,6 +178,10 @@ export default function Dashboard() {
   const [customerFeedback, setCustomerFeedback] = useState<CustomerFeedback[]>([])
   const [cancellationModalOpen, setCancellationModalOpen] = useState(false)
   const [subscriptionToCancel, setSubscriptionToCancel] = useState<ChargebeeSubscription | null>(null)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false)
+  const [subscriptionForHistory, setSubscriptionForHistory] = useState<string | null>(null)
+  const [cancellationHistory, setCancellationHistory] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const deviceHelpRef = useRef<HTMLDivElement>(null)
 
@@ -365,6 +369,26 @@ void collectibleInvoices.length
       alert('Failed to open payment page. Please try again.')
     } finally {
       setPaymentLoading(null)
+    }
+  }
+
+  const handleViewCancellationHistory = async (subscriptionId: string) => {
+    setSubscriptionForHistory(subscriptionId)
+    setHistoryLoading(true)
+    setHistoryModalOpen(true)
+    try {
+      const token = localStorage.getItem('auth_token')
+      const response = await fetch(`/api/cancellation/history/${subscriptionId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await response.json()
+      if (response.ok) {
+        setCancellationHistory(data.requests || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch cancellation history:', err)
+    } finally {
+      setHistoryLoading(false)
     }
   }
 
@@ -819,15 +843,23 @@ void collectibleInvoices.length
                                 {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
                               </button>
                               {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'in_trial') && (
-                                <button
-                                  onClick={() => {
-                                    setSubscriptionToCancel(sub)
-                                    setCancellationModalOpen(true)
-                                  }}
-                                  className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-                                >
-                                  Cancel Subscription
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setSubscriptionToCancel(sub)
+                                      setCancellationModalOpen(true)
+                                    }}
+                                    className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                                  >
+                                    Cancel Subscription
+                                  </button>
+                                  <button
+                                    onClick={() => handleViewCancellationHistory(sub.id)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                  >
+                                    View History
+                                  </button>
+                                </>
                               )}
                             </div>
                             
@@ -1529,6 +1561,118 @@ void collectibleInvoices.length
           subscription={subscriptionToCancel}
           token={authToken}
         />
+      )}
+
+      {historyModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden max-h-[80vh] flex flex-col">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-text">Cancellation Request History</h3>
+                <button
+                  onClick={() => {
+                    setHistoryModalOpen(false)
+                    setCancellationHistory([])
+                    setSubscriptionForHistory(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-sm text-muted mt-1">Subscription: {subscriptionForHistory}</p>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              {historyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-8 h-8 border-4 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: '#10a37f' }}></div>
+                </div>
+              ) : cancellationHistory.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-gray-100">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-muted">No cancellation requests found for this subscription.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {cancellationHistory.map((request, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          request.zendeskStatus === 'solved' || request.zendeskStatus === 'closed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : request.zendeskStatus === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {request.zendeskStatus || 'Submitted'}
+                        </span>
+                        <span className="text-xs text-muted">
+                          {new Date(request.createdAt).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-start gap-2">
+                          <span className="text-muted font-medium w-32">Reason:</span>
+                          <span className="text-text capitalize">{request.reason?.replace(/_/g, ' ')}</span>
+                        </div>
+                        
+                        {request.discountAccepted !== null && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-muted font-medium w-32">Discount Offer:</span>
+                            <span className={request.discountAccepted ? 'text-green-600' : 'text-red-600'}>
+                              {request.discountAccepted ? 'Accepted' : 'Declined'}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {request.contactMethod && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-muted font-medium w-32">Contact Method:</span>
+                            <span className="text-text capitalize">{request.contactMethod}</span>
+                          </div>
+                        )}
+                        
+                        {request.zendeskTicketId && (
+                          <div className="flex items-start gap-2">
+                            <span className="text-muted font-medium w-32">Ticket ID:</span>
+                            <span className="text-text font-mono">{request.zendeskTicketId}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => {
+                  setHistoryModalOpen(false)
+                  setCancellationHistory([])
+                  setSubscriptionForHistory(null)
+                }}
+                className="w-full px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showComingSoon && (

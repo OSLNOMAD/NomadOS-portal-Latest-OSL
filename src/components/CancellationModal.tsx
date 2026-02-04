@@ -9,8 +9,15 @@ interface CancellationModalProps {
     planId: string
     status: string
     planAmount: number
+    dueInvoiceCount?: number
   }
   token: string
+}
+
+interface ExistingRequest {
+  requestId: number
+  ticketId: string | null
+  message: string
 }
 
 type FlowStep = 
@@ -55,6 +62,8 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
   const [ticketId, setTicketId] = useState('')
   const [discountEligible, setDiscountEligible] = useState(true)
   const [isUnpaidSubscription, setIsUnpaidSubscription] = useState(false)
+  const [additionalNotes, setAdditionalNotes] = useState('')
+  const [existingRequest, setExistingRequest] = useState<ExistingRequest | null>(null)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -76,12 +85,22 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
         body: JSON.stringify({
           subscriptionId: subscription.id,
           subscriptionStatus: subscription.status,
-          currentPrice: Math.round((subscription.planAmount || 0) * 100)
+          currentPrice: Math.round((subscription.planAmount || 0) * 100),
+          dueInvoiceCount: subscription.dueInvoiceCount || 0
         })
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
-      setRequestId(data.requestId)
+      
+      if (data.hasExistingRequest) {
+        setExistingRequest({
+          requestId: data.existingRequestId,
+          ticketId: data.ticketId,
+          message: data.message
+        })
+      } else {
+        setRequestId(data.requestId)
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to start cancellation')
     } finally {
@@ -215,6 +234,10 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
       setError('Please enter your phone number')
       return
     }
+    if (additionalNotes.trim().length < 50) {
+      setError('Please provide at least 50 characters explaining your concerns')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -228,7 +251,8 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
           requestId,
           contactMethod,
           phone: contactMethod === 'phone' ? phone : undefined,
-          callTime: contactMethod === 'phone' ? callTime : undefined
+          callTime: contactMethod === 'phone' ? callTime : undefined,
+          additionalNotes: additionalNotes.trim()
         })
       })
       const data = await response.json()
@@ -264,6 +288,10 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
       setSuccessMessage('')
       setTicketId('')
       setRequestId(null)
+      setAdditionalNotes('')
+      setExistingRequest(null)
+      setDiscountEligible(true)
+      setIsUnpaidSubscription(false)
     }
   }, [isOpen])
 
@@ -293,7 +321,33 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
             </div>
           )}
 
-          {step === 'reason_selection' && (
+          {existingRequest && (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">⏳</span>
+                  <div>
+                    <h3 className="font-medium text-amber-800">Active Request Pending</h3>
+                    <p className="text-amber-700 text-sm mt-1">{existingRequest.message}</p>
+                    {existingRequest.ticketId && (
+                      <p className="text-amber-700 text-sm mt-2">
+                        <span className="font-medium">Ticket #:</span> {existingRequest.ticketId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="w-full py-3 text-white font-medium rounded-lg transition-colors"
+                style={{ background: 'linear-gradient(135deg, #10a37f 0%, #0d8a6a 100%)' }}
+              >
+                Got it
+              </button>
+            </div>
+          )}
+
+          {step === 'reason_selection' && !existingRequest && (
             <div className="space-y-4">
               <p className="text-gray-600">
                 We're sorry to see you go. Please help us understand why you're cancelling.
@@ -577,6 +631,25 @@ export function CancellationModal({ isOpen, onClose, subscription, token }: Canc
                   </div>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Please explain why you're canceling <span className="text-red-500">*</span>
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Share any concerns or feedback you'd like us to know before we reach out. (Minimum 50 characters)
+                </p>
+                <textarea
+                  value={additionalNotes}
+                  onChange={(e) => setAdditionalNotes(e.target.value)}
+                  placeholder="Please tell us more about your experience and why you're considering cancellation..."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                />
+                <p className={`text-xs mt-1 ${additionalNotes.length < 50 ? 'text-gray-500' : 'text-green-600'}`}>
+                  {additionalNotes.length}/50 characters minimum
+                </p>
+              </div>
 
               <button
                 onClick={handleSubmitContact}

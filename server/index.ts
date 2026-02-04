@@ -2240,12 +2240,30 @@ app.post("/api/cancellation/start", async (req, res) => {
       return res.status(401).json({ error: "Customer not found" });
     }
 
-    const { subscriptionId, subscriptionStatus, currentPrice } = req.body;
+    const { subscriptionId, subscriptionStatus, currentPrice, dueInvoiceCount } = req.body;
     if (!subscriptionId) {
       return res.status(400).json({ error: "Subscription ID is required" });
     }
 
     const customer = await storage.getCustomerByEmail(customerEmail);
+    
+    const existingRequests = await storage.getCancellationRequestsByCustomer(customerEmail);
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentOpenRequest = existingRequests.find(r => 
+      r.subscriptionId === subscriptionId && 
+      r.createdAt && r.createdAt > twentyFourHoursAgo &&
+      r.status !== "retained" && r.flowStep === "completed"
+    );
+
+    if (recentOpenRequest) {
+      return res.json({
+        success: false,
+        hasExistingRequest: true,
+        existingRequestId: recentOpenRequest.id,
+        ticketId: recentOpenRequest.zendeskTicketId,
+        message: "You already have an active cancellation request from the last 24 hours. Our team will reach out to you soon."
+      });
+    }
     
     const cancellationRequest = await storage.createCancellationRequest({
       customerId: customer?.id,
@@ -2253,6 +2271,7 @@ app.post("/api/cancellation/start", async (req, res) => {
       subscriptionId,
       subscriptionStatus,
       currentPrice,
+      dueInvoiceCount: dueInvoiceCount || 0,
       status: "started",
       flowStep: "reason_selection"
     });
@@ -2308,13 +2327,15 @@ app.post("/api/cancellation/submit-reason", async (req, res) => {
     const isUnpaid = request.subscriptionStatus === "non_renewing" || 
                      request.subscriptionStatus === "cancelled" ||
                      request.subscriptionStatus === "paused";
+    const hasDueInvoices = (request.dueInvoiceCount || 0) > 0;
+    const canTroubleshoot = !isUnpaid && !hasDueInvoices;
 
     let nextStep = "retention_offer";
     let discountEligible = !hasRecentDiscount;
     
     if (reason === "too_expensive") {
       nextStep = hasRecentDiscount ? "contact_preference" : "price_negotiation";
-    } else if ((reason === "slow_speeds" || reason === "not_reliable") && !isUnpaid) {
+    } else if ((reason === "slow_speeds" || reason === "not_reliable") && canTroubleshoot) {
       nextStep = "troubleshooting_offer";
     } else if (hasRecentDiscount) {
       nextStep = "contact_preference";
@@ -2563,9 +2584,12 @@ app.post("/api/cancellation/submit-contact", async (req, res) => {
       return res.status(401).json({ error: "Customer not found" });
     }
 
-    const { requestId, contactMethod, phone, callTime } = req.body;
+    const { requestId, contactMethod, phone, callTime, additionalNotes } = req.body;
     if (!requestId || !contactMethod) {
       return res.status(400).json({ error: "Request ID and contact method required" });
+    }
+    if (!additionalNotes || additionalNotes.trim().length < 50) {
+      return res.status(400).json({ error: "Please provide at least 50 characters explaining your concerns" });
     }
 
     const request = await storage.getCancellationRequest(requestId);
@@ -2577,6 +2601,7 @@ app.post("/api/cancellation/submit-contact", async (req, res) => {
       preferredContactMethod: contactMethod,
       preferredPhone: phone,
       preferredCallTime: callTime,
+      additionalNotes: additionalNotes.trim(),
       flowStep: "creating_ticket"
     });
 
@@ -2643,7 +2668,12 @@ ${phone ? `Phone Number: ${phone}` : ""}
 ${callTime ? `Best Time to Call: ${callTime}` : ""}
 
 ═══════════════════════════════════════
-ACTION REQUIRED: Please follow up with customer to complete cancellation or retention process.`,
+CUSTOMER'S CONCERNS
+═══════════════════════════════════════
+${additionalNotes}
+
+═══════════════════════════════════════
+ACTION REQUIRED: Please follow up with customer within 24 hours to complete cancellation or retention process.`,
               public: false
             },
             requester: { email: customerEmail, name: customer?.fullName || customerEmail },
@@ -2759,7 +2789,7 @@ ACTION REQUIRED: Please follow up with customer to complete cancellation or rete
     res.json({
       success: true,
       ticketId: zendeskTicketId,
-      message: `Your cancellation request has been submitted. ${contactMethod === "phone" ? "A member of our team will call you soon." : "We'll contact you via email shortly."}`
+      message: `Your cancellation request has been submitted (Ticket #${zendeskTicketId || "pending"}). A member of our retention team will reach out to you within the next 24 hours via ${contactMethod === "phone" ? "phone call" : "email"}.`
     });
   } catch (error: any) {
     console.error("Submit contact error:", error);
@@ -2808,6 +2838,89 @@ app.get("/api/cancellation/:requestId", async (req, res) => {
   } catch (error: any) {
     console.error("Get cancellation request error:", error);
     res.status(500).json({ error: error.message || "Failed to get cancellation request" });
+  }
+});
+
+app.get("/api/cancellation/history/:subscriptionId", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | undefined;
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded.isTest) {
+        customerEmail = decoded.email;
+      }
+    } catch {}
+
+    if (!customerEmail) {
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      customerEmail = customer?.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Customer not found" });
+    }
+
+    const { subscriptionId } = req.params;
+    const allRequests = await storage.getCancellationRequestsByCustomer(customerEmail);
+    const subscriptionRequests = allRequests.filter(r => r.subscriptionId === subscriptionId && r.flowStep === "completed");
+
+    const zendeskSubdomain = process.env.ZENDESK_SUBDOMAIN;
+    const zendeskEmail = process.env.ZENDESK_EMAIL;
+    const zendeskToken = process.env.ZENDESK_API_TOKEN;
+
+    const requestsWithStatus = await Promise.all(subscriptionRequests.map(async (request) => {
+      let ticketStatus = null;
+      
+      if (request.zendeskTicketId && zendeskSubdomain && zendeskEmail && zendeskToken) {
+        try {
+          const ticketResponse = await fetch(
+            `https://${zendeskSubdomain}.zendesk.com/api/v2/tickets/${request.zendeskTicketId}.json`,
+            {
+              headers: {
+                "Authorization": "Basic " + Buffer.from(`${zendeskEmail}/token:${zendeskToken}`).toString("base64")
+              }
+            }
+          );
+          if (ticketResponse.ok) {
+            const ticketData = await ticketResponse.json();
+            ticketStatus = ticketData.ticket?.status || null;
+          }
+        } catch (err) {
+          console.error("Failed to fetch Zendesk ticket status:", err);
+        }
+      }
+
+      return {
+        id: request.id,
+        subscriptionId: request.subscriptionId,
+        cancellationReason: request.cancellationReason,
+        reasonDetails: request.reasonDetails,
+        additionalNotes: request.additionalNotes,
+        retentionOfferAccepted: request.retentionOfferAccepted,
+        preferredContactMethod: request.preferredContactMethod,
+        zendeskTicketId: request.zendeskTicketId,
+        ticketStatus,
+        status: request.status,
+        createdAt: request.createdAt,
+        completedAt: request.completedAt
+      };
+    }));
+
+    res.json({ requests: requestsWithStatus });
+  } catch (error: any) {
+    console.error("Get cancellation history error:", error);
+    res.status(500).json({ error: error.message || "Failed to get cancellation history" });
   }
 });
 
