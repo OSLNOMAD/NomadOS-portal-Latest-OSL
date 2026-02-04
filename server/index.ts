@@ -2177,16 +2177,30 @@ app.post("/api/admin/feedback/:id/respond", async (req, res) => {
 
 app.post("/api/admin/seed", async (req, res) => {
   try {
-    const existingAdmin = await storage.getAdminByEmail("bryan@nomadinternet.com");
+    if (process.env.NODE_ENV === "production") {
+      return res.status(403).json({ error: "Not available in production" });
+    }
+
+    const { email, password, name, adminSecret } = req.body;
+    
+    if (adminSecret !== process.env.ADMIN_SEED_SECRET && adminSecret !== "dev-seed-only") {
+      return res.status(403).json({ error: "Invalid admin secret" });
+    }
+
+    const targetEmail = email || "bryan@nomadinternet.com";
+    const targetPassword = password || "Awais@0301";
+    const targetName = name || "Bryan";
+
+    const existingAdmin = await storage.getAdminByEmail(targetEmail);
     if (existingAdmin) {
       return res.json({ message: "Admin already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash("Awais@0301", 10);
+    const hashedPassword = await bcrypt.hash(targetPassword, 10);
     const admin = await storage.createAdmin({
-      email: "bryan@nomadinternet.com",
+      email: targetEmail,
       password: hashedPassword,
-      name: "Bryan"
+      name: targetName
     });
 
     res.json({ success: true, message: "Admin created", adminId: admin.id });
