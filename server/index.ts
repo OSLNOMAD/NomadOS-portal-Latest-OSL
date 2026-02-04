@@ -2722,11 +2722,15 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
 
         const slackMessage = {
           channel: channelId,
-          text: `:rotating_light: *New Cancellation Request*`,
+          text: `:rotating_light: *New Cancellation Request* <@D09HQUZ70GN> <@U09J3KB0HFB>`,
           blocks: [
             {
               type: "header",
               text: { type: "plain_text", text: "New Cancellation Request", emoji: true }
+            },
+            {
+              type: "section",
+              text: { type: "mrkdwn", text: "<@D09HQUZ70GN> <@U09J3KB0HFB>" }
             },
             {
               type: "section",
