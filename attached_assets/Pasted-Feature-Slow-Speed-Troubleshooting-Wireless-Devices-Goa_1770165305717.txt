@@ -1,0 +1,253 @@
+Feature: Slow Speed Troubleshooting (Wireless Devices)
+Goal
+
+Identify whether slow speeds are caused by environment, placement, congestion, or network conditions, and apply controlled line refreshes only when appropriate.
+
+Entry Point
+
+Trigger: Customer selects “Slow Speeds” from troubleshooting options.
+
+Step 1: Initial Qualification Questions (Mandatory)
+
+Before doing anything technical, ask these questions in order.
+
+Question 1
+
+“Have you recently started experiencing slow speeds, or has this been happening for some time?”
+
+Options:
+
+This just started
+
+It’s been happening for a while
+
+Step 2: Branch Logic
+Case A: “It’s been happening for a while”
+
+Skip refresh logic.
+
+Proceed directly to Device & Environment Speed Testing (Step 4).
+
+Case B: “This just started”
+
+Ask follow-up question.
+
+Question 2
+
+“Has the modem been moved to a new location recently?”
+
+Options:
+
+Yes
+
+No, it’s in the same spot
+
+Step 3: Network Refresh Eligibility (New Issue + Same Location)
+
+Only proceed if:
+
+Issue just started
+
+Device has not moved
+
+Step 3.1: Line Refresh (Controlled)
+
+Call ThingSpace Suspend Line endpoint.
+
+Start a 2-minute timer.
+
+Do not ask the customer to reboot yet.
+
+Show message:
+
+“We’re refreshing your network connection. This takes about 2 minutes.”
+
+Step 3.2: Resume Line
+
+After 2 minutes:
+
+Call ThingSpace Restore / Resume Line endpoint.
+
+Start another 2-minute timer.
+
+Show message:
+
+“Your connection is being restored. Please wait while this completes.”
+
+Step 3.3: Device Power Reset
+
+After the second 2-minute timer finishes, show:
+
+“Please unplug your modem from power now. We’re refreshing the connection on our side.”
+
+Start a final sync timer of 2 hours.
+
+Then instruct:
+
+“After unplugging, wait 30 seconds, then plug the modem back in.
+Changes can take up to 2 hours to fully sync.”
+
+Step 4: Device & Environment Speed Testing (All Users)
+
+This step applies to all users, regardless of refresh.
+
+Step 4.1: Basic Checks
+
+Ask the customer to complete the following in order:
+
+Reboot the modem
+
+Unplug power
+
+Wait 30 seconds
+
+Plug back in
+
+Reduce connected devices
+
+Disconnect unused phones, TVs, cameras, or smart devices
+
+Test speeds again with only one device connected
+
+Move closer to the modem
+
+Walls, floors, and distance reduce Wi-Fi performance
+
+Test speeds within 5–10 feet of the modem
+
+Step 4.2: Outdoor Signal Test (Critical)
+
+For wireless devices, always ask:
+
+“If possible, can you take the modem outside or near a window and test speeds again?”
+
+Explain clearly:
+
+“This helps us determine whether the issue is signal strength or network capacity.”
+
+Result Interpretation
+
+If speeds improve outside
+
+The issue is environmental or placement-related
+
+Advise relocating the modem closer to a window or higher location
+
+If speeds stay the same
+
+This is likely the best performance available in that area
+
+Set expectations clearly without blaming the customer
+
+Step 5: Database Logging (Mandatory)
+
+Each troubleshooting session must log:
+
+Customer ID
+
+Timestamp
+
+Issue type: slow speeds
+
+Whether a line refresh was performed
+
+Refresh timestamp
+
+Current state: waiting / eligible / completed
+
+Location test result (improved / unchanged / not performed)
+
+Step 6: Return Behavior Before 2 Hours
+
+If the customer returns before 2 hours have passed since refresh:
+
+Do not allow another refresh
+
+Show countdown timer:
+
+“Your connection is still syncing. Please wait X minutes before testing again.”
+
+Disable all refresh actions.
+
+Step 7: After 2 Hours (Post-Refresh)
+
+When 2 hours have passed:
+
+If speeds improved
+
+Mark refresh as successful
+
+End flow
+
+If speeds did not improve
+
+Show full speed troubleshooting guide again
+
+Provide option:
+
+“The last refresh helped. Perform another refresh”
+(Only if more than 7 days have passed)
+
+Step 8: Refresh Cooldown Rules (Anti-Abuse)
+
+A line refresh can only be performed:
+
+Once every 7 days
+
+OR immediately if the last refresh clearly improved speeds and customer confirms regression
+
+If less than 7 days:
+
+Disable refresh
+
+Explain:
+
+“We recently refreshed your connection. Repeating this too soon can cause instability.”
+
+Step 9: Escalation Conditions
+
+Escalate only if:
+
+Speeds are slow outdoors
+
+Refresh did not help
+
+Issue persists beyond 7 days
+
+Customer reports severe degradation vs historical performance
+
+Show message:
+
+“We’ve completed all automated checks. Our support team will review coverage and network conditions in your area.”
+
+Create ticket with full log history attached.
+
+Important Rules (Do Not Break)
+
+Never loop refreshes endlessly
+
+Never ask the customer to reboot during suspend state
+
+Never promise speed increases
+
+Always test outdoors for wireless devices
+
+Always log refresh attempts
+
+Always enforce cooldowns
+
+Outcome
+
+This flow:
+
+Prevents unnecessary escalations
+
+Stops refresh spam
+
+Sets realistic expectations
+
+Gives customers visible progress
+
+Preserves network stability
+
+Gives support clean historical data

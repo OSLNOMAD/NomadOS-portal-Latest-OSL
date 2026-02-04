@@ -1497,6 +1497,360 @@ app.post("/api/feedback", async (req, res) => {
   }
 });
 
+app.post("/api/slow-speed/check-eligibility", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | null = null;
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+        customerEmail = decoded.email;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Could not determine customer" });
+    }
+
+    const { subscriptionId } = req.body;
+    if (!subscriptionId) {
+      return res.status(400).json({ error: "Subscription ID is required" });
+    }
+
+    const recentRefresh = await storage.getRecentSlowSpeedRefresh(customerEmail, subscriptionId);
+
+    if (recentRefresh) {
+      const refreshStartedAt = new Date(recentRefresh.refreshStartedAt!);
+      const syncExpiresAt = recentRefresh.syncExpiresAt ? new Date(recentRefresh.syncExpiresAt) : null;
+      const daysSinceRefresh = (Date.now() - refreshStartedAt.getTime()) / (1000 * 60 * 60 * 24);
+      
+      const now = Date.now();
+      const isSyncing = syncExpiresAt && now < syncExpiresAt.getTime();
+      const syncMinutesRemaining = isSyncing ? Math.ceil((syncExpiresAt!.getTime() - now) / (1000 * 60)) : 0;
+
+      res.json({
+        canRefresh: daysSinceRefresh >= 7 && !isSyncing,
+        lastRefreshDate: refreshStartedAt.toISOString(),
+        daysSinceRefresh: Math.floor(daysSinceRefresh),
+        daysUntilNextRefresh: Math.max(0, Math.ceil(7 - daysSinceRefresh)),
+        isSyncing,
+        syncMinutesRemaining,
+        lastSessionId: recentRefresh.id,
+        speedsImproved: recentRefresh.speedsImproved
+      });
+    } else {
+      res.json({
+        canRefresh: true,
+        lastRefreshDate: null,
+        daysSinceRefresh: null,
+        daysUntilNextRefresh: 0,
+        isSyncing: false,
+        syncMinutesRemaining: 0,
+        lastSessionId: null,
+        speedsImproved: null
+      });
+    }
+  } catch (error: any) {
+    console.error("Check slow speed eligibility error:", error);
+    res.status(500).json({ error: error.message || "Failed to check eligibility" });
+  }
+});
+
+app.post("/api/slow-speed/start-session", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | null = null;
+    let customerId: number | null = null;
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+        customerEmail = decoded.email;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+      customerId = customer.id;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Could not determine customer" });
+    }
+
+    const { subscriptionId, iccid, imei, mdn, issueOnset, modemMoved } = req.body;
+    
+    if (!subscriptionId) {
+      return res.status(400).json({ error: "Subscription ID is required" });
+    }
+
+    const newSession = await storage.createSlowSpeedSession({
+      customerId,
+      customerEmail: customerEmail.toLowerCase(),
+      subscriptionId,
+      iccid: iccid || null,
+      imei: imei || null,
+      mdn: mdn || null,
+      issueOnset: issueOnset || null,
+      modemMoved: modemMoved || null,
+      sessionState: "qualification"
+    });
+
+    console.log("Slow speed session started:", newSession.id);
+
+    res.json({
+      success: true,
+      sessionId: newSession.id
+    });
+  } catch (error: any) {
+    console.error("Start slow speed session error:", error);
+    res.status(500).json({ error: error.message || "Failed to start session" });
+  }
+});
+
+app.post("/api/slow-speed/update-session", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+    }
+
+    const { sessionId, ...updateData } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    const updated = await storage.updateSlowSpeedSession(sessionId, updateData);
+
+    if (!updated) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    res.json({
+      success: true,
+      session: updated
+    });
+  } catch (error: any) {
+    console.error("Update slow speed session error:", error);
+    res.status(500).json({ error: error.message || "Failed to update session" });
+  }
+});
+
+app.post("/api/slow-speed/start-refresh", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | null = null;
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+        customerEmail = decoded.email;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+    }
+
+    if (!customerEmail) {
+      return res.status(401).json({ error: "Could not determine customer" });
+    }
+
+    const { sessionId, subscriptionId, mdn } = req.body;
+    
+    if (!sessionId || !subscriptionId) {
+      return res.status(400).json({ error: "Session ID and Subscription ID are required" });
+    }
+
+    const recentRefresh = await storage.getRecentSlowSpeedRefresh(customerEmail, subscriptionId);
+    if (recentRefresh) {
+      const refreshStartedAt = new Date(recentRefresh.refreshStartedAt!);
+      const daysSinceRefresh = (Date.now() - refreshStartedAt.getTime()) / (1000 * 60 * 60 * 24);
+      
+      if (daysSinceRefresh < 7) {
+        return res.status(400).json({ 
+          error: "A line refresh was recently performed. Please wait before refreshing again.",
+          daysUntilNextRefresh: Math.ceil(7 - daysSinceRefresh)
+        });
+      }
+    }
+
+    const now = new Date();
+    const syncExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+    const updated = await storage.updateSlowSpeedSession(sessionId, {
+      refreshPerformed: true,
+      refreshStartedAt: now,
+      syncExpiresAt: syncExpiresAt,
+      sessionState: "refresh_suspend"
+    });
+
+    console.log("Slow speed refresh started for session:", sessionId);
+
+    res.json({
+      success: true,
+      session: updated,
+      syncExpiresAt: syncExpiresAt.toISOString()
+    });
+  } catch (error: any) {
+    console.error("Start refresh error:", error);
+    res.status(500).json({ error: error.message || "Failed to start refresh" });
+  }
+});
+
+app.post("/api/slow-speed/complete-refresh", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+    }
+
+    const { sessionId, speedsImproved, outdoorTestResult } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    const updated = await storage.updateSlowSpeedSession(sessionId, {
+      refreshCompletedAt: new Date(),
+      sessionState: "completed",
+      speedsImproved: speedsImproved ?? null,
+      outdoorTestResult: outdoorTestResult || null
+    });
+
+    res.json({
+      success: true,
+      session: updated
+    });
+  } catch (error: any) {
+    console.error("Complete refresh error:", error);
+    res.status(500).json({ error: error.message || "Failed to complete refresh" });
+  }
+});
+
+app.get("/api/slow-speed/session/:sessionId", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let isTestToken = false;
+
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (decoded.isTest) {
+        isTestToken = true;
+      }
+    } catch (e) {}
+
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) {
+        return res.status(401).json({ error: "Invalid session" });
+      }
+    }
+
+    const sessionId = parseInt(req.params.sessionId);
+    const slowSpeedSession = await storage.getSlowSpeedSession(sessionId);
+
+    if (!slowSpeedSession) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    res.json(slowSpeedSession);
+  } catch (error: any) {
+    console.error("Get slow speed session error:", error);
+    res.status(500).json({ error: error.message || "Failed to get session" });
+  }
+});
+
 app.get("/api/device/plans", async (req, res) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");

@@ -64,6 +64,29 @@ export const customerFeedback = pgTable("customer_feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const slowSpeedSessions = pgTable("slow_speed_sessions", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id),
+  customerEmail: varchar("customer_email", { length: 255 }).notNull(),
+  subscriptionId: varchar("subscription_id", { length: 255 }).notNull(),
+  iccid: varchar("iccid", { length: 50 }),
+  imei: varchar("imei", { length: 50 }),
+  mdn: varchar("mdn", { length: 20 }),
+  issueOnset: varchar("issue_onset", { length: 50 }),
+  modemMoved: boolean("modem_moved"),
+  refreshPerformed: boolean("refresh_performed").default(false),
+  refreshStartedAt: timestamp("refresh_started_at"),
+  refreshCompletedAt: timestamp("refresh_completed_at"),
+  syncExpiresAt: timestamp("sync_expires_at"),
+  sessionState: varchar("session_state", { length: 50 }).default("started"),
+  outdoorTestResult: varchar("outdoor_test_result", { length: 50 }),
+  speedsImproved: boolean("speeds_improved"),
+  escalated: boolean("escalated").default(false),
+  escalationTicketId: varchar("escalation_ticket_id", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const customersRelations = relations(customers, ({ many }) => ({
   otpCodes: many(otpCodes),
   sessions: many(sessions),
@@ -93,6 +116,8 @@ export type EscalationTicket = typeof escalationTickets.$inferSelect;
 export type InsertEscalationTicket = typeof escalationTickets.$inferInsert;
 export type CustomerFeedback = typeof customerFeedback.$inferSelect;
 export type InsertCustomerFeedback = typeof customerFeedback.$inferInsert;
+export type SlowSpeedSession = typeof slowSpeedSessions.$inferSelect;
+export type InsertSlowSpeedSession = typeof slowSpeedSessions.$inferInsert;
 
 export const insertCustomerSchema = createInsertSchema(customers);
 export const insertOtpCodeSchema = createInsertSchema(otpCodes);

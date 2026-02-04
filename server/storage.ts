@@ -1,4 +1,4 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gt, or } from "drizzle-orm";
 
@@ -25,6 +25,11 @@ export interface IStorage {
   getEscalationByTicketId(ticketId: string): Promise<EscalationTicket | undefined>;
   
   createFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback>;
+  
+  createSlowSpeedSession(session: InsertSlowSpeedSession): Promise<SlowSpeedSession>;
+  getSlowSpeedSession(id: number): Promise<SlowSpeedSession | undefined>;
+  getRecentSlowSpeedRefresh(customerEmail: string, subscriptionId: string): Promise<SlowSpeedSession | undefined>;
+  updateSlowSpeedSession(id: number, data: Partial<InsertSlowSpeedSession>): Promise<SlowSpeedSession | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -169,6 +174,43 @@ export class DatabaseStorage implements IStorage {
   async createFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback> {
     const [newFeedback] = await db.insert(customerFeedback).values(feedback).returning();
     return newFeedback;
+  }
+
+  async createSlowSpeedSession(session: InsertSlowSpeedSession): Promise<SlowSpeedSession> {
+    const [newSession] = await db.insert(slowSpeedSessions).values(session).returning();
+    return newSession;
+  }
+
+  async getSlowSpeedSession(id: number): Promise<SlowSpeedSession | undefined> {
+    const [session] = await db.select().from(slowSpeedSessions).where(eq(slowSpeedSessions.id, id));
+    return session || undefined;
+  }
+
+  async getRecentSlowSpeedRefresh(customerEmail: string, subscriptionId: string): Promise<SlowSpeedSession | undefined> {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const [session] = await db
+      .select()
+      .from(slowSpeedSessions)
+      .where(
+        and(
+          eq(slowSpeedSessions.customerEmail, customerEmail.toLowerCase()),
+          eq(slowSpeedSessions.subscriptionId, subscriptionId),
+          eq(slowSpeedSessions.refreshPerformed, true),
+          gt(slowSpeedSessions.refreshStartedAt, sevenDaysAgo)
+        )
+      );
+    
+    return session || undefined;
+  }
+
+  async updateSlowSpeedSession(id: number, data: Partial<InsertSlowSpeedSession>): Promise<SlowSpeedSession | undefined> {
+    const [updated] = await db
+      .update(slowSpeedSessions)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(slowSpeedSessions.id, id))
+      .returning();
+    return updated || undefined;
   }
 }
 
