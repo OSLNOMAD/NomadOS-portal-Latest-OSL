@@ -6,65 +6,34 @@ interface Plan {
   name: string
   price: number
   description: string
-  category: 'residential' | 'travel' | 'business' | 'rural'
+  features: string[]
+  category: 'residential' | 'travel'
 }
 
 const availablePlans: Plan[] = [
   {
     id: 'Nomad-Unlimited-Residential-Plan',
     name: 'Nomad Unlimited Residential',
-    price: 129,
-    description: 'Perfect for home use with unlimited data and reliable speeds.',
+    price: 99.95,
+    description: 'Best for full-time home or fixed-location use',
+    features: [
+      'Designed for one primary location',
+      'Stable performance for everyday home internet use',
+      'Ideal for households and remote work'
+    ],
     category: 'residential'
   },
   {
     id: 'Nomad-Unlimited-Travel-Plan',
     name: 'Nomad Unlimited Travel',
-    price: 149,
-    description: 'Take your internet anywhere with our travel-optimized plan.',
+    price: 129.95,
+    description: 'Best for RV, travel, or changing locations',
+    features: [
+      'Works at home and while traveling',
+      'Designed for movement and flexible locations',
+      'Pause and resume service when not in use'
+    ],
     category: 'travel'
-  },
-  {
-    id: 'Nomad-Unlimited-Lite-Plan',
-    name: 'Nomad Unlimited Lite',
-    price: 99,
-    description: 'Budget-friendly option with essential features for light users.',
-    category: 'residential'
-  },
-  {
-    id: 'Nomad-Rural-Unlimited-100-Mbps-9995',
-    name: 'Nomad Rural 100 Mbps',
-    price: 99.95,
-    description: 'Designed for rural areas with speeds up to 100 Mbps.',
-    category: 'rural'
-  },
-  {
-    id: 'Nomad-Rural-Unlimited-Ultra-200-Mbps-14995',
-    name: 'Nomad Rural Ultra 200 Mbps',
-    price: 149.95,
-    description: 'Premium rural service with speeds up to 200 Mbps.',
-    category: 'rural'
-  },
-  {
-    id: 'Nomad-Residential-5G',
-    name: 'Nomad Residential 5G',
-    price: 159,
-    description: 'Next-generation 5G speeds for your home.',
-    category: 'residential'
-  },
-  {
-    id: 'Unlimited-Fixed-Wireless-Access-Business-Internet-100Mbps-Plan',
-    name: 'Nomad Business 100 Mbps',
-    price: 199,
-    description: 'Professional-grade internet for small businesses.',
-    category: 'business'
-  },
-  {
-    id: 'Unlimited-Fixed-Wireless-Access-Business-Internet-200Mbps',
-    name: 'Nomad Business 200 Mbps',
-    price: 299,
-    description: 'High-performance internet for demanding business needs.',
-    category: 'business'
   }
 ]
 
@@ -86,12 +55,8 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState<'all' | 'residential' | 'travel' | 'business' | 'rural'>('all')
 
-  const filteredPlans = availablePlans.filter(plan => {
-    if (filter === 'all') return true
-    return plan.category === filter
-  }).filter(plan => plan.id !== subscription.planId)
+  const filteredPlans = availablePlans.filter(plan => plan.id !== subscription.planId)
 
   const handleSubmit = async () => {
     if (!selectedPlan) return
@@ -183,84 +148,82 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
               >
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {(['all', 'residential', 'travel', 'business', 'rural'] as const).map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setFilter(cat)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                        filter === cat
-                          ? 'text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                      style={filter === cat ? { backgroundColor: '#10a37f' } : {}}
-                    >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredPlans.length === 0 ? (
-                    <div className="text-center py-8 text-muted">
-                      No other plans available in this category.
+                    <div className="col-span-2 text-center py-8 text-muted">
+                      You are already on the only available plan.
                     </div>
                   ) : (
                     filteredPlans.map((plan) => (
                       <motion.label
                         key={plan.id}
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.99 }}
-                        className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        whileHover={{ scale: 1.02, y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`block rounded-2xl cursor-pointer transition-all overflow-hidden ${
                           selectedPlan?.id === plan.id
-                            ? 'border-[#10a37f] bg-[#10a37f]/5 shadow-md'
-                            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                            ? 'ring-2 ring-[#10a37f] shadow-lg'
+                            : 'border border-gray-200 hover:shadow-md'
                         }`}
                       >
-                        <div className="flex items-start gap-4">
-                          <div className="flex-shrink-0 mt-1">
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                              selectedPlan?.id === plan.id
-                                ? 'border-[#10a37f] bg-[#10a37f]'
-                                : 'border-gray-300'
-                            }`}>
-                              {selectedPlan?.id === plan.id && (
-                                <motion.div
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="w-2 h-2 bg-white rounded-full"
-                                />
-                              )}
-                            </div>
-                            <input
-                              type="radio"
-                              name="plan"
-                              value={plan.id}
-                              checked={selectedPlan?.id === plan.id}
-                              onChange={() => setSelectedPlan(plan)}
-                              className="sr-only"
-                            />
+                        <div 
+                          className="p-4 text-white"
+                          style={{ 
+                            background: plan.category === 'residential' 
+                              ? 'linear-gradient(135deg, #1a3a32 0%, #2d5a4a 100%)'
+                              : 'linear-gradient(135deg, #1a3a32 0%, #2d5a4a 100%)'
+                          }}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                            </svg>
+                            <span className="text-lg font-bold">nomad</span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-4">
-                              <h3 className="font-semibold text-text">{plan.name}</h3>
-                              <div className="text-right flex-shrink-0">
-                                <span className="text-lg font-bold" style={{ color: '#10a37f' }}>
-                                  ${plan.price.toFixed(2)}
-                                </span>
-                                <span className="text-muted text-sm">/mo</span>
-                              </div>
-                            </div>
-                            <p className="text-sm text-muted mt-1">{plan.description}</p>
-                            <span className={`inline-block mt-2 px-2 py-0.5 text-xs font-medium rounded-full ${
-                              plan.category === 'residential' ? 'bg-blue-100 text-blue-700' :
-                              plan.category === 'travel' ? 'bg-purple-100 text-purple-700' :
-                              plan.category === 'business' ? 'bg-amber-100 text-amber-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
-                              {plan.category.charAt(0).toUpperCase() + plan.category.slice(1)}
-                            </span>
+                          <p className="text-sm text-white/80 uppercase tracking-wide">
+                            unlimited {plan.category}
+                          </p>
+                        </div>
+                        
+                        <div className="p-4 bg-white">
+                          <div className="flex items-center gap-2 mb-3 text-muted">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            <span className="text-sm">{plan.description}</span>
                           </div>
+                          
+                          <ul className="space-y-2 mb-4">
+                            {plan.features.map((feature, idx) => (
+                              <li key={idx} className="flex items-start gap-2 text-sm">
+                                <span className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: '#10a37f' }}></span>
+                                <span className="text-gray-700">{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          
+                          <div className="flex items-baseline gap-1 mb-4">
+                            <span className="text-3xl font-bold text-text">${plan.price.toFixed(2)}</span>
+                            <span className="text-muted">/month</span>
+                          </div>
+                          
+                          <div className={`w-full py-3 rounded-lg text-center font-medium transition-all ${
+                            selectedPlan?.id === plan.id
+                              ? 'text-white'
+                              : 'border border-gray-300 text-gray-700 hover:border-gray-400'
+                          }`}
+                          style={selectedPlan?.id === plan.id ? { backgroundColor: '#10a37f' } : {}}
+                          >
+                            {selectedPlan?.id === plan.id ? 'Selected' : `Select ${plan.category.charAt(0).toUpperCase() + plan.category.slice(1)} Plan`}
+                          </div>
+                          
+                          <input
+                            type="radio"
+                            name="plan"
+                            value={plan.id}
+                            checked={selectedPlan?.id === plan.id}
+                            onChange={() => setSelectedPlan(plan)}
+                            className="sr-only"
+                          />
                         </div>
                       </motion.label>
                     ))
