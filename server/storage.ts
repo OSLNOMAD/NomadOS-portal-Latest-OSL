@@ -272,12 +272,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePortalSetting(key: string, value: string, updatedBy: string): Promise<PortalSetting | undefined> {
+    // Try to update first
     const [updated] = await db
       .update(portalSettings)
       .set({ value, updatedAt: new Date(), updatedBy })
       .where(eq(portalSettings.key, key))
       .returning();
-    return updated || undefined;
+    
+    if (updated) {
+      return updated;
+    }
+    
+    // If no existing record, insert new one
+    const [inserted] = await db
+      .insert(portalSettings)
+      .values({ key, value, updatedBy })
+      .returning();
+    return inserted || undefined;
   }
 
   async getAllPortalSettings(): Promise<PortalSetting[]> {
