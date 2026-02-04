@@ -1,0 +1,316 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+
+interface Feedback {
+  id: number
+  customerEmail: string
+  feedbackType: string
+  message: string
+  rating: number | null
+  adminResponse: string | null
+  respondedAt: string | null
+  respondedBy: string | null
+  status: string | null
+  createdAt: string
+}
+
+export default function AdminDashboard() {
+  const [feedback, setFeedback] = useState<Feedback[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null)
+  const [responseText, setResponseText] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'pending' | 'responded'>('all')
+  const navigate = useNavigate()
+
+  const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}')
+
+  useEffect(() => {
+    const token = localStorage.getItem('admin_token')
+    if (!token) {
+      navigate('/admin')
+      return
+    }
+    fetchFeedback()
+  }, [navigate])
+
+  const fetchFeedback = async () => {
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch('/api/admin/feedback', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+        navigate('/admin')
+        return
+      }
+
+      const data = await response.json()
+      setFeedback(data.feedback || [])
+    } catch (err) {
+      setError('Failed to load feedback')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRespond = async () => {
+    if (!selectedFeedback || !responseText.trim()) return
+    
+    setSubmitting(true)
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch(`/api/admin/feedback/${selectedFeedback.id}/respond`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ response: responseText })
+      })
+
+      if (response.ok) {
+        await fetchFeedback()
+        setSelectedFeedback(null)
+        setResponseText('')
+      } else {
+        const data = await response.json()
+        setError(data.error || 'Failed to submit response')
+      }
+    } catch (err) {
+      setError('Failed to submit response')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_user')
+    navigate('/admin')
+  }
+
+  const filteredFeedback = feedback.filter(f => {
+    if (filter === 'pending') return f.status === 'pending' || !f.status
+    if (filter === 'responded') return f.status === 'responded'
+    return true
+  })
+
+  const getFeedbackTypeColor = (type: string) => {
+    switch (type) {
+      case 'feature_request': return 'bg-blue-100 text-blue-700'
+      case 'bug_report': return 'bg-red-100 text-red-700'
+      case 'compliment': return 'bg-green-100 text-green-700'
+      default: return 'bg-gray-100 text-gray-700'
+    }
+  }
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/logo.svg" alt="Nomad Internet" className="h-8" />
+            <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">Welcome, {adminUser.name || adminUser.email}</span>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+            {error}
+            <button onClick={() => setError('')} className="ml-2 underline">Dismiss</button>
+          </div>
+        )}
+
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Customer Feedback</h2>
+            <p className="text-gray-600">{feedback.length} total submissions</p>
+          </div>
+          
+          <div className="flex gap-2">
+            {(['all', 'pending', 'responded'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  filter === f
+                    ? 'bg-primary text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+                {f === 'pending' && (
+                  <span className="ml-2 px-2 py-0.5 text-xs bg-orange-500 text-white rounded-full">
+                    {feedback.filter(fb => fb.status === 'pending' || !fb.status).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4">
+          {filteredFeedback.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+              <p className="text-gray-500">No feedback found</p>
+            </div>
+          ) : (
+            filteredFeedback.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getFeedbackTypeColor(item.feedbackType)}`}>
+                        {item.feedbackType.replace('_', ' ')}
+                      </span>
+                      {item.status === 'responded' ? (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                          Responded
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                          Pending
+                        </span>
+                      )}
+                      {item.rating && (
+                        <span className="text-yellow-500">
+                          {'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-sm text-gray-500 mb-2">
+                      From: <span className="font-medium text-gray-700">{item.customerEmail}</span>
+                      <span className="mx-2">•</span>
+                      {formatDate(item.createdAt)}
+                    </p>
+                    
+                    <p className="text-gray-800 whitespace-pre-wrap">{item.message}</p>
+                    
+                    {item.adminResponse && (
+                      <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-xs text-green-600 mb-1">
+                          Response by {item.respondedBy} on {formatDate(item.respondedAt!)}
+                        </p>
+                        <p className="text-green-800">{item.adminResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => {
+                        setSelectedFeedback(item)
+                        setResponseText(item.adminResponse || '')
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-accent transition-colors"
+                    >
+                      {item.adminResponse ? 'Edit Response' : 'Respond'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </main>
+
+      <AnimatePresence>
+        {selectedFeedback && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            onClick={() => setSelectedFeedback(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-2xl w-full max-w-lg"
+            >
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Respond to Feedback</h3>
+                <p className="text-sm text-gray-500">From: {selectedFeedback.customerEmail}</p>
+              </div>
+              
+              <div className="p-6">
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-gray-600 mb-1">Original Message:</p>
+                  <p className="text-gray-800">{selectedFeedback.message}</p>
+                </div>
+                
+                <label className="block text-sm font-medium text-gray-700 mb-2">Your Response</label>
+                <textarea
+                  value={responseText}
+                  onChange={(e) => setResponseText(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+                  rows={4}
+                  placeholder="Type your response here..."
+                />
+              </div>
+              
+              <div className="p-6 border-t border-gray-200 flex gap-3 justify-end">
+                <button
+                  onClick={() => setSelectedFeedback(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRespond}
+                  disabled={!responseText.trim() || submitting}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Response'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}

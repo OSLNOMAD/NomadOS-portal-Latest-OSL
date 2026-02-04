@@ -30,6 +30,11 @@ export interface IStorage {
   getSlowSpeedSession(id: number): Promise<SlowSpeedSession | undefined>;
   getRecentSlowSpeedRefresh(customerEmail: string, subscriptionId: string): Promise<SlowSpeedSession | undefined>;
   updateSlowSpeedSession(id: number, data: Partial<InsertSlowSpeedSession>): Promise<SlowSpeedSession | undefined>;
+  
+  getAdminByEmail(email: string): Promise<AdminUser | undefined>;
+  createAdmin(admin: InsertAdminUser): Promise<AdminUser>;
+  getAllFeedback(): Promise<CustomerFeedback[]>;
+  updateFeedbackResponse(id: number, response: string, respondedBy: string): Promise<CustomerFeedback | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -209,6 +214,37 @@ export class DatabaseStorage implements IStorage {
       .update(slowSpeedSessions)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(slowSpeedSessions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async getAdminByEmail(email: string): Promise<AdminUser | undefined> {
+    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase()));
+    return admin || undefined;
+  }
+
+  async createAdmin(admin: InsertAdminUser): Promise<AdminUser> {
+    const [newAdmin] = await db.insert(adminUsers).values({
+      ...admin,
+      email: admin.email.toLowerCase()
+    }).returning();
+    return newAdmin;
+  }
+
+  async getAllFeedback(): Promise<CustomerFeedback[]> {
+    return await db.select().from(customerFeedback).orderBy(desc(customerFeedback.createdAt));
+  }
+
+  async updateFeedbackResponse(id: number, response: string, respondedBy: string): Promise<CustomerFeedback | undefined> {
+    const [updated] = await db
+      .update(customerFeedback)
+      .set({ 
+        adminResponse: response, 
+        respondedAt: new Date(), 
+        respondedBy,
+        status: 'responded'
+      })
+      .where(eq(customerFeedback.id, id))
       .returning();
     return updated || undefined;
   }

@@ -7,6 +7,8 @@ import AccountSettings from './pages/AccountSettings'
 import ActivityLog from './pages/ActivityLog'
 import TestLogin from './pages/TestLogin'
 import Troubleshoot from './pages/Troubleshoot'
+import AdminLogin from './pages/AdminLogin'
+import AdminDashboard from './pages/AdminDashboard'
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
       <Route path="/activity" element={<ActivityLog />} />
       <Route path="/testing6699452" element={<TestLogin />} />
       <Route path="/troubleshoot" element={<Troubleshoot />} />
+      <Route path="/admin" element={<AdminLogin />} />
+      <Route path="/admin/dashboard" element={<AdminDashboard />} />
     </Routes>
   )
 }

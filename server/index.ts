@@ -2086,6 +2086,116 @@ app.post("/api/device/change-plan", async (req, res) => {
   }
 });
 
+// Admin API endpoints
+app.post("/api/admin/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const admin = await storage.getAdminByEmail(email);
+    if (!admin) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, admin.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign({ adminId: admin.id, email: admin.email, isAdmin: true }, JWT_SECRET!, { expiresIn: '24h' });
+    res.json({ token, admin: { id: admin.id, email: admin.email, name: admin.name } });
+  } catch (error: any) {
+    console.error("Admin login error:", error);
+    res.status(500).json({ error: error.message || "Login failed" });
+  }
+});
+
+app.get("/api/admin/feedback", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const feedback = await storage.getAllFeedback();
+    res.json({ feedback });
+  } catch (error: any) {
+    console.error("Get feedback error:", error);
+    res.status(500).json({ error: error.message || "Failed to get feedback" });
+  }
+});
+
+app.post("/api/admin/feedback/:id/respond", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    let adminEmail: string;
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET!);
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      adminEmail = decoded.email;
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { id } = req.params;
+    const { response } = req.body;
+    
+    if (!response) {
+      return res.status(400).json({ error: "Response is required" });
+    }
+
+    const updated = await storage.updateFeedbackResponse(parseInt(id), response, adminEmail);
+    if (!updated) {
+      return res.status(404).json({ error: "Feedback not found" });
+    }
+
+    res.json({ success: true, feedback: updated });
+  } catch (error: any) {
+    console.error("Respond to feedback error:", error);
+    res.status(500).json({ error: error.message || "Failed to respond" });
+  }
+});
+
+app.post("/api/admin/seed", async (req, res) => {
+  try {
+    const existingAdmin = await storage.getAdminByEmail("bryan@nomadinternet.com");
+    if (existingAdmin) {
+      return res.json({ message: "Admin already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash("Awais@0301", 10);
+    const admin = await storage.createAdmin({
+      email: "bryan@nomadinternet.com",
+      password: hashedPassword,
+      name: "Bryan"
+    });
+
+    res.json({ success: true, message: "Admin created", adminId: admin.id });
+  } catch (error: any) {
+    console.error("Seed admin error:", error);
+    res.status(500).json({ error: error.message || "Failed to seed admin" });
+  }
+});
+
 if (process.env.NODE_ENV === "production") {
   const distPath = path.join(__dirname, "..", "dist");
   app.use(express.static(distPath));
