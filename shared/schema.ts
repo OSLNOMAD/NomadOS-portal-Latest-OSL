@@ -76,6 +76,41 @@ export const adminUsers = pgTable("admin_users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const portalSettings = pgTable("portal_settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value").notNull(),
+  description: varchar("description", { length: 255 }),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by", { length: 255 }),
+});
+
+export const cancellationRequests = pgTable("cancellation_requests", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id),
+  customerEmail: varchar("customer_email", { length: 255 }).notNull(),
+  subscriptionId: varchar("subscription_id", { length: 255 }).notNull(),
+  subscriptionStatus: varchar("subscription_status", { length: 50 }),
+  currentPrice: integer("current_price"),
+  cancellationReason: varchar("cancellation_reason", { length: 100 }),
+  reasonDetails: text("reason_details"),
+  targetPrice: integer("target_price"),
+  retentionOfferShown: varchar("retention_offer_shown", { length: 255 }),
+  retentionOfferAccepted: boolean("retention_offer_accepted"),
+  troubleshootingOffered: boolean("troubleshooting_offered"),
+  troubleshootingAccepted: boolean("troubleshooting_accepted"),
+  preferredContactMethod: varchar("preferred_contact_method", { length: 20 }),
+  preferredPhone: varchar("preferred_phone", { length: 20 }),
+  preferredCallTime: varchar("preferred_call_time", { length: 100 }),
+  zendeskTicketId: varchar("zendesk_ticket_id", { length: 100 }),
+  slackMessageTs: varchar("slack_message_ts", { length: 100 }),
+  status: varchar("status", { length: 50 }).default("started"),
+  flowStep: varchar("flow_step", { length: 50 }).default("reason_selection"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const slowSpeedSessions = pgTable("slow_speed_sessions", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customers.id),
@@ -132,6 +167,10 @@ export type SlowSpeedSession = typeof slowSpeedSessions.$inferSelect;
 export type InsertSlowSpeedSession = typeof slowSpeedSessions.$inferInsert;
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type InsertAdminUser = typeof adminUsers.$inferInsert;
+export type PortalSetting = typeof portalSettings.$inferSelect;
+export type InsertPortalSetting = typeof portalSettings.$inferInsert;
+export type CancellationRequest = typeof cancellationRequests.$inferSelect;
+export type InsertCancellationRequest = typeof cancellationRequests.$inferInsert;
 
 export const insertCustomerSchema = createInsertSchema(customers);
 export const insertOtpCodeSchema = createInsertSchema(otpCodes);
