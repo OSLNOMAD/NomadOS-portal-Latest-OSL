@@ -3053,7 +3053,7 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
         
         const slackMessage = {
           channel: channelId,
-          text: `:rotating_light: *New Cancellation Request* <@U05HMJ0JG79> <@U09J3KB0HFB>`,
+          text: `:rotating_light: *New Cancellation Request* <@U09HLQ6229K> <@U09J3KB0HFB>`,
           blocks: [
             {
               type: "header",
@@ -3061,7 +3061,7 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
             },
             {
               type: "section",
-              text: { type: "mrkdwn", text: "<@U05HMJ0JG79> <@U09J3KB0HFB>" }
+              text: { type: "mrkdwn", text: "<@U09HLQ6229K> <@U09J3KB0HFB>" }
             },
             {
               type: "section",
@@ -3447,7 +3447,7 @@ app.post("/api/admin/test-cancellation-slack", async (req, res) => {
     
     const testMessage = {
       channel: channelId,
-      text: `:rotating_light: *New Cancellation Request* <@U05HMJ0JG79> <@U09J3KB0HFB>`,
+      text: `:rotating_light: *New Cancellation Request* <@U09HLQ6229K> <@U09J3KB0HFB>`,
       blocks: [
         {
           type: "header",
@@ -3455,7 +3455,7 @@ app.post("/api/admin/test-cancellation-slack", async (req, res) => {
         },
         {
           type: "section",
-          text: { type: "mrkdwn", text: "<@U05HMJ0JG79> <@U09J3KB0HFB>" }
+          text: { type: "mrkdwn", text: "<@U09HLQ6229K> <@U09J3KB0HFB>" }
         },
         {
           type: "section",
