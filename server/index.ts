@@ -2419,10 +2419,10 @@ app.post("/api/plan-change-request", async (req, res) => {
       iccid: iccid || null,
       currentPlanId,
       currentPlanName,
-      currentPrice,
+      currentPrice: Math.round((currentPrice || 0) * 100),
       requestedPlanId,
       requestedPlanName,
-      requestedPrice,
+      requestedPrice: Math.round(requestedPrice || 0),
       thingspacePlanCode,
       status: 'processing'
     });
