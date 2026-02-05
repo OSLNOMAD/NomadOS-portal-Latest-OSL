@@ -1490,7 +1490,7 @@ export async function scheduleSubscriptionPlanChange(
     formData.append('replace_items_list', 'true');
     formData.append('end_of_term', 'true');
     
-    const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2/subscriptions/${subscriptionId}`, {
+    const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2/subscriptions/${subscriptionId}/update_subscription_for_items`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
