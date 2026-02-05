@@ -876,12 +876,7 @@ void collectibleInvoices.length
                                   {(sub.mdn || sub.iccid || sub.imei) && (
                                     <button
                                       onClick={() => {
-                                        setSubscriptionForPlanChange({
-                                          ...sub,
-                                          chargebeeCustomerId: cbCustomer.id
-                                        })
-                                        setCustomerForPlanChange({ email: cbCustomer.email, name: cbCustomer.firstName + ' ' + cbCustomer.lastName })
-                                        setPlanChangeModalOpen(true)
+                                        alert('This feature is under development. Please check back soon!')
                                       }}
                                       className="px-4 py-2 text-sm font-medium border rounded-lg transition-all hover:shadow-md"
                                       style={{ color: '#10a37f', borderColor: '#10a37f' }}
