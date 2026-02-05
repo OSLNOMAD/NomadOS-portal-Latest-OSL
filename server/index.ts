@@ -3049,9 +3049,11 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
             ? "Declined" 
             : "N/A";
 
+        const reasonDetailsText = request.reasonDetails ? `\n\n*Customer's Comments:*\n>${request.reasonDetails.replace(/\n/g, '\n>')}` : '';
+        
         const slackMessage = {
           channel: channelId,
-          text: `:rotating_light: *New Cancellation Request* <@D09HQUZ70GN> <@U09J3KB0HFB>`,
+          text: `:rotating_light: *New Cancellation Request* <@U05HMJ0JG79> <@U09J3KB0HFB>`,
           blocks: [
             {
               type: "header",
@@ -3059,7 +3061,7 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
             },
             {
               type: "section",
-              text: { type: "mrkdwn", text: "<@D09HQUZ70GN> <@U09J3KB0HFB>" }
+              text: { type: "mrkdwn", text: "<@U05HMJ0JG79> <@U09J3KB0HFB>" }
             },
             {
               type: "section",
@@ -3072,6 +3074,10 @@ ACTION REQUIRED: Please follow up with customer within 24 hours to complete canc
                 { type: "mrkdwn", text: `*Discount:* ${discountEmoji}\n${discountStatusShort}` }
               ]
             },
+            ...(request.reasonDetails ? [{
+              type: "section",
+              text: { type: "mrkdwn", text: `*Customer's Comments:*\n>${request.reasonDetails.replace(/\n/g, '\n>')}` }
+            }] : []),
             {
               type: "section",
               fields: [
@@ -3425,6 +3431,82 @@ app.get("/api/admin/cancellations/export", async (req, res) => {
   } catch (error: any) {
     console.error("Export cancellations error:", error);
     res.status(500).json({ error: error.message || "Failed to export cancellations" });
+  }
+});
+
+// Test endpoint for cancellation Slack message
+app.post("/api/admin/test-cancellation-slack", async (req, res) => {
+  try {
+    const slackToken = process.env.SLACK_BOT_TOKEN;
+    if (!slackToken) {
+      return res.status(400).json({ error: "SLACK_BOT_TOKEN not configured" });
+    }
+    
+    const channelId = (await storage.getPortalSetting('slack_channel_id'))?.value || 'C09DACN82VD';
+    const zendeskSubdomain = process.env.ZENDESK_SUBDOMAIN || 'nomadinternet';
+    
+    const testMessage = {
+      channel: channelId,
+      text: `:rotating_light: *New Cancellation Request* <@U05HMJ0JG79> <@U09J3KB0HFB>`,
+      blocks: [
+        {
+          type: "header",
+          text: { type: "plain_text", text: "New Cancellation Request", emoji: true }
+        },
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: "<@U05HMJ0JG79> <@U09J3KB0HFB>" }
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Customer:*\nTest Customer` },
+            { type: "mrkdwn", text: `*Email:*\ntest@example.com` },
+            { type: "mrkdwn", text: `*Subscription:*\nTEST-SUB-12345` },
+            { type: "mrkdwn", text: `*Current Price:*\n$99.00/mo` },
+            { type: "mrkdwn", text: `*Reason:*\ntoo expensive` },
+            { type: "mrkdwn", text: `*Discount:* :white_check_mark:\nAccepted` }
+          ]
+        },
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: `*Customer's Comments:*\n>I really enjoyed the service but it's just not in my budget right now.\n>Maybe I'll come back when prices are lower.` }
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Contact Method:*\nPhone: (555) 123-4567` },
+            { type: "mrkdwn", text: `*Zendesk Ticket:*\n<https://${zendeskSubdomain}.zendesk.com/agent/tickets/99999|#99999>` }
+          ]
+        },
+        {
+          type: "context",
+          elements: [
+            { type: "mrkdwn", text: `[TEST MESSAGE] Submitted via Customer Portal • ${new Date().toLocaleString()}` }
+          ]
+        }
+      ]
+    };
+    
+    const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${slackToken}`
+      },
+      body: JSON.stringify(testMessage)
+    });
+    
+    const slackResult = await slackResponse.json();
+    if (!slackResult.ok) {
+      console.error("Slack test message failed:", slackResult);
+      return res.status(500).json({ error: slackResult.error || "Failed to send test message" });
+    }
+    
+    res.json({ success: true, message: "Test cancellation message sent to Slack" });
+  } catch (error: any) {
+    console.error("Test Slack message error:", error);
+    res.status(500).json({ error: error.message || "Failed to send test message" });
   }
 });
 
