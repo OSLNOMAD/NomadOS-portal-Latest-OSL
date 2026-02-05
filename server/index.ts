@@ -2369,7 +2369,6 @@ app.post("/api/plan-change-request", async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     let customerEmail: string;
-    let customerId: number | undefined;
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
@@ -2384,7 +2383,6 @@ app.post("/api/plan-change-request", async (req, res) => {
         return res.status(401).json({ error: "Customer not found" });
       }
       customerEmail = customer.email;
-      customerId = customer.id;
     }
 
     const {
@@ -2397,7 +2395,6 @@ app.post("/api/plan-change-request", async (req, res) => {
       requestedPrice,
       customerName,
       chargebeeCustomerId,
-      mdn,
       iccid
     } = req.body;
 
@@ -2405,137 +2402,75 @@ app.post("/api/plan-change-request", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const thingspacePlanCode = THINGSPACE_PLAN_CODES[requestedPlanId as keyof typeof THINGSPACE_PLAN_CODES];
-    if (!thingspacePlanCode) {
-      return res.status(400).json({ error: "Invalid plan selected" });
+    // Send Slack notification for manual processing
+    const slackToken = process.env.SLACK_BOT_TOKEN;
+    if (slackToken) {
+      const targetChannel = "C09DACN82VD";
+      const priceDiff = ((requestedPrice || 0) / 100) - (currentPrice || 0);
+      const priceChangeText = priceDiff > 0 
+        ? `Upgrade (+$${priceDiff.toFixed(2)}/mo)` 
+        : priceDiff < 0 
+        ? `Downgrade (-$${Math.abs(priceDiff).toFixed(2)}/mo)` 
+        : 'Same price';
+
+      const blocks = [
+        {
+          type: "header",
+          text: { type: "plain_text", text: "📋 Plan Change Request", emoji: true }
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Customer:*\n${customerName || customerEmail}` },
+            { type: "mrkdwn", text: `*Email:*\n${customerEmail}` },
+            { type: "mrkdwn", text: `*Subscription ID:*\n${subscriptionId}` },
+            { type: "mrkdwn", text: `*Chargebee Customer:*\n${chargebeeCustomerId || 'N/A'}` }
+          ]
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*Current Plan:*\n${currentPlanName || currentPlanId}\n$${(currentPrice || 0).toFixed(2)}/mo` },
+            { type: "mrkdwn", text: `*Requested Plan:*\n${requestedPlanName || requestedPlanId}\n$${((requestedPrice || 0) / 100).toFixed(2)}/mo` }
+          ]
+        },
+        {
+          type: "section",
+          fields: [
+            { type: "mrkdwn", text: `*ICCID:*\n${iccid || 'N/A'}` },
+            { type: "mrkdwn", text: `*Change Type:*\n${priceChangeText}` }
+          ]
+        },
+        {
+          type: "context",
+          elements: [
+            { type: "mrkdwn", text: `Submitted via Customer Portal on ${new Date().toLocaleString()}` }
+          ]
+        }
+      ];
+
+      try {
+        await fetch('https://slack.com/api/chat.postMessage', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${slackToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            channel: targetChannel,
+            blocks,
+            text: `Plan change request from ${customerName || customerEmail}`
+          })
+        });
+        console.log(`Plan change Slack notification sent for ${customerEmail}`);
+      } catch (slackError) {
+        console.error('Error sending Slack notification:', slackError);
+      }
     }
-
-    const verification = await storage.createPlanChangeVerification({
-      customerId: customerId,
-      customerEmail,
-      subscriptionId,
-      chargebeeCustomerId,
-      mdn: mdn || null,
-      iccid: iccid || null,
-      currentPlanId,
-      currentPlanName,
-      currentPrice: Math.round((currentPrice || 0) * 100),
-      requestedPlanId,
-      requestedPlanName,
-      requestedPrice: Math.round(requestedPrice || 0),
-      thingspacePlanCode,
-      status: 'processing'
-    });
-
-    const { scheduleSubscriptionPlanChange, addChargebeeCustomerComment, changeDevicePlan } = await import('./services');
-
-    const chargebeeResult = await scheduleSubscriptionPlanChange(subscriptionId, requestedPlanId);
-    
-    if (!chargebeeResult.success) {
-      await storage.updatePlanChangeVerification(verification.id, {
-        status: 'failed',
-        verificationError: `Chargebee error: ${chargebeeResult.error}`
-      });
-      return res.status(500).json({ error: chargebeeResult.error || "Failed to update subscription" });
-    }
-
-    await storage.updatePlanChangeVerification(verification.id, {
-      chargebeeUpdated: true,
-      chargebeeNextBillingDate: chargebeeResult.nextBillingDate ? new Date(chargebeeResult.nextBillingDate) : undefined
-    });
-
-    if (chargebeeCustomerId) {
-      const commentText = `Plan change requested by customer via Portal.
-- From: ${currentPlanName || currentPlanId} ($${((currentPrice || 0) / 100).toFixed(2)}/mo)
-- To: ${requestedPlanName || requestedPlanId} ($${((requestedPrice || 0) / 100).toFixed(2)}/mo)
-- Effective: ${chargebeeResult.nextBillingDate ? new Date(chargebeeResult.nextBillingDate).toLocaleDateString() : 'Next billing date'}
-- Subscription ID: ${subscriptionId}
-- ThingSpace Plan Code: ${thingspacePlanCode}`;
-
-      await addChargebeeCustomerComment(chargebeeCustomerId, commentText);
-    }
-
-    // If no MDN, skip ThingSpace and notify team for manual update
-    if (!mdn) {
-      await storage.updatePlanChangeVerification(verification.id, {
-        thingspaceRequested: false,
-        verificationError: 'No MDN available - manual network change required',
-        slackNotificationSent: true,
-        status: 'completed',
-        verificationStatus: 'skipped'
-      });
-
-      await sendPlanChangeSlackAlert('manual_required', {
-        customerEmail,
-        customerName,
-        subscriptionId,
-        mdn: 'N/A',
-        iccid: iccid || 'N/A',
-        currentPlan: currentPlanName || currentPlanId,
-        requestedPlan: requestedPlanName || requestedPlanId,
-        error: 'No MDN on subscription - manual ThingSpace update required'
-      });
-
-      console.log(`Plan change billing updated for ${customerEmail} (no MDN - manual network change needed)`);
-
-      return res.json({
-        success: true,
-        verificationId: verification.id,
-        message: "Billing updated successfully. Our team will update your network speed shortly.",
-        nextBillingDate: chargebeeResult.nextBillingDate,
-        thingspaceStatus: 'manual_required'
-      });
-    }
-
-    const currentThingspacePlanCode = THINGSPACE_PLAN_CODES[currentPlanId as keyof typeof THINGSPACE_PLAN_CODES] || '';
-    const thingspaceResult = await changeDevicePlan(mdn, 'mdn', currentThingspacePlanCode, thingspacePlanCode);
-
-    if (!thingspaceResult.success) {
-      await storage.updatePlanChangeVerification(verification.id, {
-        thingspaceRequested: false,
-        verificationError: `ThingSpace error: ${thingspaceResult.error}`,
-        slackNotificationSent: true
-      });
-
-      await sendPlanChangeSlackAlert('failure', {
-        customerEmail,
-        customerName,
-        subscriptionId,
-        mdn,
-        currentPlan: currentPlanName || currentPlanId,
-        requestedPlan: requestedPlanName || requestedPlanId,
-        error: thingspaceResult.error
-      });
-
-      return res.json({
-        success: true,
-        verificationId: verification.id,
-        message: "Subscription updated. Network change requires manual processing.",
-        nextBillingDate: chargebeeResult.nextBillingDate,
-        thingspaceStatus: 'manual_required'
-      });
-    }
-
-    const verificationScheduledAt = new Date(Date.now() + 5 * 60 * 1000);
-    await storage.updatePlanChangeVerification(verification.id, {
-      thingspaceRequested: true,
-      thingspaceRequestId: thingspaceResult.requestId,
-      verificationScheduledAt,
-      verificationStatus: 'pending'
-    });
-
-    const timeoutId = setTimeout(() => verifyPlanChange(verification.id), 5 * 60 * 1000);
-    pendingVerifications.set(verification.id, timeoutId);
-
-    console.log(`Plan change initiated for ${customerEmail}, verification scheduled in 5 minutes`);
 
     res.json({
       success: true,
-      verificationId: verification.id,
-      message: "Plan change initiated successfully",
-      nextBillingDate: chargebeeResult.nextBillingDate,
-      thingspaceStatus: 'processing',
-      verificationScheduledAt: verificationScheduledAt.toISOString()
+      message: "Your plan change request has been submitted. Our team will process it within 24 hours."
     });
   } catch (error: any) {
     console.error("Plan change request error:", error);
