@@ -38,15 +38,20 @@ The design adheres to official Nomad Internet branding, featuring a modern SaaS 
 - **`app.lrlos.com`**: External webhook for sending OTPs and activation requests.
 
 ## Recent Changes
-- Feb 4, 2026: Plan Change Request Feature
-  - "Change Plan" button on subscription cards for active/paused/trial subscriptions
-  - Modern modal with category filters (All, Residential, Travel, Business, Rural)
-  - Radio button selection for available plans with pricing and descriptions
-  - Confirmation step with current vs. new plan comparison
-  - Sends Slack DM to plan change handler (U05HMJ0JG79) with request details
-  - Shows upgrade/downgrade price difference in notifications
-  - Success confirmation with 24-hour response time message
-  - API endpoint: POST /api/plan-change-request
+- Feb 5, 2026: Automated Plan Change with ThingSpace Integration
+  - Full automation: Chargebee billing update + ThingSpace network speed change
+  - Chargebee subscription update with end_of_term=true (billing changes at next cycle)
+  - Chargebee customer profile comment documenting the change (who, what, when)
+  - ThingSpace API integration for immediate network speed change
+  - Plan mapping: Residential → 100 Mbps (59142x48526x84777), Travel → 200 Mbps (59145x48526x84777)
+  - 5-minute verification: checks ThingSpace device status to confirm plan changed
+  - Live countdown timer on portal while verifying plan change
+  - Slack notifications on ThingSpace failure or verification mismatch
+  - "Change Plan" button only visible for subscriptions with MDN (device required)
+  - Database table: `plan_change_verifications` tracks full change lifecycle
+  - API endpoints: POST /api/plan-change-request, GET /api/plan-change-status/:id
+- Feb 4, 2026: Plan Change Request Feature (superseded by Feb 5 automation)
+  - Original Slack-only notification approach replaced with full automation
 - Feb 4, 2026: Cancellation & Retention Flow
   - Multi-step cancellation modal with reason selection (too expensive, slow speeds, not reliable, no longer needed, moving, other)
   - Intelligent flows based on reason: price negotiation for "too expensive", troubleshooting offer for speed/reliability issues (active subscriptions only)
