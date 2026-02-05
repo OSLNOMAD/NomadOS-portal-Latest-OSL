@@ -20,6 +20,7 @@ interface Customer {
 interface ChargebeeSubscription {
   id: string
   planId: string
+  planName?: string
   status: string
   planAmount: number
   billingPeriod: number
@@ -32,6 +33,7 @@ interface ChargebeeSubscription {
   iccid: string | null
   imei: string | null
   mdn: string | null
+  chargebeeCustomerId?: string
 }
 
 interface ChargebeeInvoice {
@@ -848,18 +850,23 @@ void collectibleInvoices.length
                               </button>
                               {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'in_trial') && (
                                 <>
-                                  <button
-                                    onClick={() => {
-                                      setSubscriptionForPlanChange(sub)
-                                      setCustomerForPlanChange({ email: cbCustomer.email, name: cbCustomer.firstName + ' ' + cbCustomer.lastName })
-                                      setPlanChangeModalOpen(true)
-                                    }}
-                                    className="px-4 py-2 text-sm font-medium border rounded-lg transition-all hover:shadow-md"
-                                    style={{ color: '#10a37f', borderColor: '#10a37f' }}
-                                    title="Request a plan change"
-                                  >
-                                    Change Plan
-                                  </button>
+                                  {sub.mdn && (
+                                    <button
+                                      onClick={() => {
+                                        setSubscriptionForPlanChange({
+                                          ...sub,
+                                          chargebeeCustomerId: cbCustomer.id
+                                        })
+                                        setCustomerForPlanChange({ email: cbCustomer.email, name: cbCustomer.firstName + ' ' + cbCustomer.lastName })
+                                        setPlanChangeModalOpen(true)
+                                      }}
+                                      className="px-4 py-2 text-sm font-medium border rounded-lg transition-all hover:shadow-md"
+                                      style={{ color: '#10a37f', borderColor: '#10a37f' }}
+                                      title="Change your plan and network speed"
+                                    >
+                                      Change Plan
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => {
                                       setSubscriptionToCancel(sub)

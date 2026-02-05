@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface Plan {
@@ -8,6 +8,7 @@ interface Plan {
   description: string
   features: string[]
   category: 'residential' | 'travel'
+  speedMbps: number
 }
 
 const availablePlans: Plan[] = [
@@ -19,9 +20,11 @@ const availablePlans: Plan[] = [
     features: [
       'Designed for one primary location',
       'Stable performance for everyday home internet use',
-      'Ideal for households and remote work'
+      'Ideal for households and remote work',
+      '100 Mbps network speed'
     ],
-    category: 'residential'
+    category: 'residential',
+    speedMbps: 100
   },
   {
     id: 'Nomad-Unlimited-Travel-Plan',
@@ -31,9 +34,11 @@ const availablePlans: Plan[] = [
     features: [
       'Works at home and while traveling',
       'Designed for movement and flexible locations',
-      'Pause and resume service when not in use'
+      'Pause and resume service when not in use',
+      '200 Mbps network speed'
     ],
-    category: 'travel'
+    category: 'travel',
+    speedMbps: 200
   }
 ]
 
@@ -43,7 +48,11 @@ interface PlanChangeModalProps {
   subscription: {
     id: string
     planId: string
+    planName?: string
     planAmount: number
+    chargebeeCustomerId?: string
+    mdn?: string | null
+    iccid?: string | null
   }
   customerEmail: string
   customerName: string
@@ -51,18 +60,73 @@ interface PlanChangeModalProps {
 }
 
 export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, customerName, token }: PlanChangeModalProps) {
-  const [step, setStep] = useState<'select' | 'confirm' | 'success'>('select')
+  const [step, setStep] = useState<'select' | 'confirm' | 'processing' | 'verifying' | 'success' | 'partial_success'>('select')
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [verificationId, setVerificationId] = useState<number | null>(null)
+  const [nextBillingDate, setNextBillingDate] = useState<string | null>(null)
+  const [timeRemaining, setTimeRemaining] = useState(300)
+  const [verificationStatus, setVerificationStatus] = useState<string>('pending')
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const filteredPlans = availablePlans.filter(plan => plan.id !== subscription.planId)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (step === 'verifying' && verificationId) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/plan-change-status/${verificationId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          const data = await response.json()
+          
+          if (data.verificationStatus === 'verified') {
+            setVerificationStatus('verified')
+            setStep('success')
+            if (timerRef.current) clearInterval(timerRef.current)
+            if (pollRef.current) clearInterval(pollRef.current)
+          } else if (data.verificationStatus === 'failed' || data.verificationStatus === 'error') {
+            setVerificationStatus('failed')
+            if (timerRef.current) clearInterval(timerRef.current)
+            if (pollRef.current) clearInterval(pollRef.current)
+          }
+        } catch (err) {
+          console.error('Error polling verification status:', err)
+        }
+      }, 10000)
+
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current)
+        if (pollRef.current) clearInterval(pollRef.current)
+      }
+    }
+  }, [step, verificationId, token])
 
   const handleSubmit = async () => {
     if (!selectedPlan) return
     
     setIsSubmitting(true)
     setError('')
+    setStep('processing')
     
     try {
       const response = await fetch('/api/plan-change-request', {
@@ -74,12 +138,16 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
         body: JSON.stringify({
           subscriptionId: subscription.id,
           currentPlanId: subscription.planId,
+          currentPlanName: subscription.planName || subscription.planId,
           currentPrice: subscription.planAmount,
           requestedPlanId: selectedPlan.id,
           requestedPlanName: selectedPlan.name,
           requestedPrice: selectedPlan.price * 100,
           customerEmail,
-          customerName
+          customerName,
+          chargebeeCustomerId: subscription.chargebeeCustomerId,
+          mdn: subscription.mdn || undefined,
+          iccid: subscription.iccid || undefined
         })
       })
       
@@ -89,19 +157,48 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
         throw new Error(data.error || 'Failed to submit plan change request')
       }
       
-      setStep('success')
+      setVerificationId(data.verificationId)
+      setNextBillingDate(data.nextBillingDate)
+      
+      if (data.thingspaceStatus === 'manual_required') {
+        setStep('partial_success')
+      } else {
+        setTimeRemaining(300)
+        setStep('verifying')
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
+      setStep('confirm')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleClose = () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (pollRef.current) clearInterval(pollRef.current)
     setStep('select')
     setSelectedPlan(null)
     setError('')
+    setVerificationId(null)
+    setNextBillingDate(null)
+    setTimeRemaining(300)
+    setVerificationStatus('pending')
     onClose()
+  }
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
   }
 
   if (!isOpen) return null
@@ -120,22 +217,30 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
               <h2 className="text-xl font-bold text-white">
                 {step === 'select' && 'Change Your Plan'}
                 {step === 'confirm' && 'Confirm Plan Change'}
-                {step === 'success' && 'Request Submitted'}
+                {step === 'processing' && 'Processing...'}
+                {step === 'verifying' && 'Verifying Plan Change'}
+                {step === 'success' && 'Plan Changed Successfully'}
+                {step === 'partial_success' && 'Plan Change Scheduled'}
               </h2>
               <p className="text-white/80 text-sm mt-1">
                 {step === 'select' && 'Select a new plan for your subscription'}
                 {step === 'confirm' && 'Review your plan change request'}
-                {step === 'success' && 'Our team will process your request shortly'}
+                {step === 'processing' && 'Updating your subscription...'}
+                {step === 'verifying' && 'Confirming your new network speed'}
+                {step === 'success' && 'Your plan has been updated'}
+                {step === 'partial_success' && 'Billing updated, network change in progress'}
               </p>
             </div>
-            <button
-              onClick={handleClose}
-              className="p-2 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            {step !== 'processing' && step !== 'verifying' && (
+              <button
+                onClick={handleClose}
+                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
@@ -168,9 +273,7 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                         <div 
                           className="p-4 text-white"
                           style={{ 
-                            background: plan.category === 'residential' 
-                              ? 'linear-gradient(135deg, #1a3a32 0%, #2d5a4a 100%)'
-                              : 'linear-gradient(135deg, #1a3a32 0%, #2d5a4a 100%)'
+                            background: 'linear-gradient(135deg, #1a3a32 0%, #2d5a4a 100%)'
                           }}
                         >
                           <div className="flex items-center gap-2 mb-1">
@@ -181,6 +284,9 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                           </div>
                           <p className="text-sm text-white/80 uppercase tracking-wide">
                             unlimited {plan.category}
+                          </p>
+                          <p className="text-xs text-white/60 mt-1">
+                            {plan.speedMbps} Mbps Network Speed
                           </p>
                         </div>
                         
@@ -252,7 +358,7 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                     <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
                       <div>
                         <p className="text-xs text-muted uppercase tracking-wide">Current Plan</p>
-                        <p className="font-medium text-text">{subscription.planId}</p>
+                        <p className="font-medium text-text">{subscription.planName || subscription.planId}</p>
                         <p className="text-sm" style={{ color: '#10a37f' }}>${(subscription.planAmount / 100).toFixed(2)}/mo</p>
                       </div>
                       <div className="text-gray-400">
@@ -267,17 +373,18 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                       </div>
                     </div>
 
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <div>
-                          <p className="text-sm text-amber-800 font-medium">Important Notice</p>
-                          <p className="text-sm text-amber-700 mt-1">
-                            This is a request only. Our team will review and contact you to confirm the plan change. 
-                            Your current plan will remain active until the change is processed.
-                          </p>
+                          <p className="text-sm text-blue-800 font-medium">What happens next</p>
+                          <ul className="text-sm text-blue-700 mt-1 space-y-1">
+                            <li>• Your network speed will change to {selectedPlan.speedMbps} Mbps immediately</li>
+                            <li>• Billing will update on your next billing cycle</li>
+                            <li>• No prorated charges - clean billing on renewal</li>
+                          </ul>
                         </div>
                       </div>
                     </div>
@@ -287,6 +394,75 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                 {error && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     {error}
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {step === 'processing' && (
+              <motion.div
+                key="processing"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-12"
+              >
+                <div className="w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center" style={{ backgroundColor: '#10a37f20' }}>
+                  <div className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#10a37f', borderTopColor: 'transparent' }} />
+                </div>
+                <h3 className="text-lg font-semibold text-text mb-2">Updating Your Plan</h3>
+                <p className="text-muted">Please wait while we process your request...</p>
+              </motion.div>
+            )}
+
+            {step === 'verifying' && (
+              <motion.div
+                key="verifying"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-8"
+              >
+                <div className="w-32 h-32 mx-auto mb-6 relative">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle
+                      cx="64"
+                      cy="64"
+                      r="56"
+                      fill="none"
+                      stroke="#e5e7eb"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="64"
+                      cy="64"
+                      r="56"
+                      fill="none"
+                      stroke="#10a37f"
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(timeRemaining / 300) * 352} 352`}
+                      className="transition-all duration-1000"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-text">{formatTime(timeRemaining)}</span>
+                  </div>
+                </div>
+                
+                <h3 className="text-lg font-semibold text-text mb-2">Verifying Plan Change</h3>
+                <p className="text-muted mb-4">
+                  We're confirming your new {selectedPlan?.speedMbps} Mbps network speed is active.
+                </p>
+                
+                <div className="flex items-center justify-center gap-2 text-sm text-muted">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <span>Network update in progress</span>
+                </div>
+
+                {verificationStatus === 'failed' && (
+                  <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-left">
+                    <p className="text-sm text-amber-800">
+                      The verification is taking longer than expected. Your billing has been updated and our team has been notified to complete the network change manually.
+                    </p>
                   </div>
                 )}
               </motion.div>
@@ -310,17 +486,53 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </motion.div>
-                <h3 className="text-xl font-bold text-text mb-2">Request Submitted!</h3>
+                <h3 className="text-xl font-bold text-text mb-2">Plan Changed Successfully!</h3>
                 <p className="text-muted mb-6 max-w-md mx-auto">
-                  Your plan change request has been sent to our team. We'll review it and get back to you within 24 hours.
+                  Your network speed has been upgraded to {selectedPlan?.speedMbps} Mbps.
+                  {nextBillingDate && (
+                    <> Your new rate of ${selectedPlan?.price.toFixed(2)}/mo will take effect on {formatDate(nextBillingDate)}.</>
+                  )}
                 </p>
                 {selectedPlan && (
                   <div className="inline-block bg-gray-50 rounded-lg px-6 py-3">
-                    <p className="text-sm text-muted">Requested Plan</p>
+                    <p className="text-sm text-muted">New Plan</p>
                     <p className="font-semibold text-text">{selectedPlan.name}</p>
-                    <p className="text-sm" style={{ color: '#10a37f' }}>${selectedPlan.price.toFixed(2)}/mo</p>
+                    <p className="text-sm" style={{ color: '#10a37f' }}>${selectedPlan.price.toFixed(2)}/mo • {selectedPlan.speedMbps} Mbps</p>
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {step === 'partial_success' && (
+              <motion.div
+                key="partial_success"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-center py-8"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', duration: 0.5 }}
+                  className="w-20 h-20 mx-auto mb-6 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: '#f59e0b20' }}
+                >
+                  <svg className="w-10 h-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </motion.div>
+                <h3 className="text-xl font-bold text-text mb-2">Plan Change Scheduled</h3>
+                <p className="text-muted mb-6 max-w-md mx-auto">
+                  Your billing has been updated successfully.
+                  {nextBillingDate && (
+                    <> Your new rate of ${selectedPlan?.price.toFixed(2)}/mo will take effect on {formatDate(nextBillingDate)}.</>
+                  )}
+                </p>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-left max-w-md mx-auto">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> Our team has been notified to complete the network speed change manually. You should see the updated speed within 24 hours.
+                  </p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -365,22 +577,32 @@ export function PlanChangeModal({ isOpen, onClose, subscription, customerEmail, 
                   {isSubmitting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Submitting...
+                      Processing...
                     </>
                   ) : (
-                    'Submit Request'
+                    'Confirm Plan Change'
                   )}
                 </button>
               </>
             )}
 
-            {step === 'success' && (
+            {(step === 'success' || step === 'partial_success') && (
               <button
                 onClick={handleClose}
                 className="w-full px-4 py-3 text-sm font-medium text-white rounded-xl transition-all hover:shadow-lg"
                 style={{ backgroundColor: '#10a37f' }}
               >
                 Done
+              </button>
+            )}
+
+            {step === 'verifying' && timeRemaining === 0 && (
+              <button
+                onClick={handleClose}
+                className="w-full px-4 py-3 text-sm font-medium text-white rounded-xl transition-all hover:shadow-lg"
+                style={{ backgroundColor: '#10a37f' }}
+              >
+                Close
               </button>
             )}
           </div>

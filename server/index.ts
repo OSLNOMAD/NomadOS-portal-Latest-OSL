@@ -2210,6 +2210,153 @@ app.post("/api/admin/feedback/:id/respond", async (req, res) => {
   }
 });
 
+const THINGSPACE_PLAN_CODES = {
+  'Nomad-Unlimited-Residential-Plan': '59142x48526x84777',
+  'Nomad-Unlimited-Travel-Plan': '59145x48526x84777'
+} as const;
+
+const pendingVerifications: Map<number, NodeJS.Timeout> = new Map();
+
+async function sendPlanChangeSlackAlert(type: 'failure' | 'verification_failed', data: {
+  customerEmail: string;
+  customerName?: string;
+  subscriptionId: string;
+  mdn?: string;
+  currentPlan: string;
+  requestedPlan: string;
+  expectedPlanCode?: string;
+  actualPlanCode?: string;
+  error?: string;
+}) {
+  const slackToken = process.env.SLACK_BOT_TOKEN;
+  if (!slackToken) return;
+
+  const targetChannel = "C09DACN82VD";
+  const emoji = type === 'failure' ? ':warning:' : ':x:';
+  const title = type === 'failure' 
+    ? 'Manual ThingSpace Update Required' 
+    : 'ThingSpace Plan Change Verification Failed';
+
+  const blocks: any[] = [
+    {
+      type: "header",
+      text: { type: "plain_text", text: `${emoji} ${title}`, emoji: true }
+    },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Customer:*\n${data.customerName || data.customerEmail}` },
+        { type: "mrkdwn", text: `*Email:*\n${data.customerEmail}` },
+        { type: "mrkdwn", text: `*Subscription:*\n${data.subscriptionId}` },
+        { type: "mrkdwn", text: `*MDN:*\n${data.mdn || 'N/A'}` }
+      ]
+    },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Current Plan:*\n${data.currentPlan}` },
+        { type: "mrkdwn", text: `*Requested Plan:*\n${data.requestedPlan}` }
+      ]
+    }
+  ];
+
+  if (type === 'verification_failed' && data.expectedPlanCode && data.actualPlanCode) {
+    blocks.push({
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Expected Plan Code:*\n\`${data.expectedPlanCode}\`` },
+        { type: "mrkdwn", text: `*Actual Plan Code:*\n\`${data.actualPlanCode}\`` }
+      ]
+    });
+  }
+
+  if (data.error) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*Error:*\n\`\`\`${data.error}\`\`\`` }
+    });
+  }
+
+  blocks.push({
+    type: "context",
+    elements: [
+      { type: "mrkdwn", text: `Chargebee updated successfully - please update ThingSpace manually • ${new Date().toLocaleString()}` }
+    ]
+  });
+
+  await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${slackToken}`
+    },
+    body: JSON.stringify({
+      channel: targetChannel,
+      text: `${emoji} ${title} - ${data.customerEmail}`,
+      blocks
+    })
+  });
+}
+
+async function verifyPlanChange(verificationId: number) {
+  const { getDeviceStatus } = await import('./services');
+  
+  const verification = await storage.getPlanChangeVerification(verificationId);
+  if (!verification || verification.verificationStatus !== 'pending') return;
+
+  try {
+    const mdn = verification.mdn;
+    if (!mdn) {
+      await storage.updatePlanChangeVerification(verificationId, {
+        verificationStatus: 'failed',
+        verificationError: 'No MDN found for verification',
+        verificationCompletedAt: new Date()
+      });
+      return;
+    }
+
+    const deviceStatus = await getDeviceStatus(mdn, 'mdn');
+    const expectedPlanCode = verification.thingspacePlanCode;
+    const actualPlanCode = deviceStatus?.carrier?.servicePlan;
+
+    if (actualPlanCode === expectedPlanCode) {
+      await storage.updatePlanChangeVerification(verificationId, {
+        verificationStatus: 'verified',
+        verificationCompletedAt: new Date(),
+        status: 'completed'
+      });
+      console.log(`Plan change verification ${verificationId} succeeded`);
+    } else {
+      await storage.updatePlanChangeVerification(verificationId, {
+        verificationStatus: 'failed',
+        verificationError: `Plan mismatch: expected ${expectedPlanCode}, got ${actualPlanCode}`,
+        verificationCompletedAt: new Date(),
+        slackNotificationSent: true
+      });
+
+      await sendPlanChangeSlackAlert('verification_failed', {
+        customerEmail: verification.customerEmail,
+        subscriptionId: verification.subscriptionId,
+        mdn: verification.mdn || undefined,
+        currentPlan: verification.currentPlanName || verification.currentPlanId,
+        requestedPlan: verification.requestedPlanName || verification.requestedPlanId,
+        expectedPlanCode: expectedPlanCode || undefined,
+        actualPlanCode: actualPlanCode || 'unknown'
+      });
+      console.log(`Plan change verification ${verificationId} failed - Slack alert sent`);
+    }
+  } catch (error: any) {
+    console.error(`Error verifying plan change ${verificationId}:`, error);
+    await storage.updatePlanChangeVerification(verificationId, {
+      verificationStatus: 'error',
+      verificationError: error.message,
+      verificationCompletedAt: new Date()
+    });
+  } finally {
+    pendingVerifications.delete(verificationId);
+  }
+}
+
 app.post("/api/plan-change-request", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -2219,101 +2366,183 @@ app.post("/api/plan-change-request", async (req, res) => {
 
     const token = authHeader.split(" ")[1];
     let customerEmail: string;
+    let customerId: number | undefined;
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       customerEmail = decoded.email;
     } catch {
-      return res.status(401).json({ error: "Invalid token" });
+      const session = await storage.getSessionByToken(token);
+      if (!session || session.expiresAt < new Date()) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) {
+        return res.status(401).json({ error: "Customer not found" });
+      }
+      customerEmail = customer.email;
+      customerId = customer.id;
     }
 
     const {
       subscriptionId,
       currentPlanId,
+      currentPlanName,
       currentPrice,
       requestedPlanId,
       requestedPlanName,
       requestedPrice,
-      customerName
+      customerName,
+      chargebeeCustomerId,
+      mdn,
+      iccid
     } = req.body;
 
     if (!subscriptionId || !requestedPlanId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const slackToken = process.env.SLACK_BOT_TOKEN;
-    const targetUserId = "U05HMJ0JG79";
-
-    if (!slackToken) {
-      return res.status(500).json({ error: "Slack integration not configured" });
+    if (!mdn) {
+      return res.status(400).json({ error: "Plan changes require a device with MDN" });
     }
 
-    const currentPriceFormatted = ((currentPrice || 0) / 100).toFixed(2);
-    const requestedPriceFormatted = ((requestedPrice || 0) / 100).toFixed(2);
-    const priceDiff = (requestedPrice - currentPrice) / 100;
-    const priceChangeText = priceDiff > 0 
-      ? `+$${priceDiff.toFixed(2)}/mo (upgrade)` 
-      : priceDiff < 0 
-        ? `-$${Math.abs(priceDiff).toFixed(2)}/mo (downgrade)` 
-        : 'No change';
+    const thingspacePlanCode = THINGSPACE_PLAN_CODES[requestedPlanId as keyof typeof THINGSPACE_PLAN_CODES];
+    if (!thingspacePlanCode) {
+      return res.status(400).json({ error: "Invalid plan selected" });
+    }
 
-    const slackMessage = {
-      channel: targetUserId,
-      text: `:arrows_counterclockwise: *Plan Change Request*`,
-      blocks: [
-        {
-          type: "header",
-          text: { type: "plain_text", text: "Plan Change Request", emoji: true }
-        },
-        {
-          type: "section",
-          fields: [
-            { type: "mrkdwn", text: `*Customer:*\n${customerName || customerEmail}` },
-            { type: "mrkdwn", text: `*Email:*\n${customerEmail}` },
-            { type: "mrkdwn", text: `*Subscription:*\n${subscriptionId}` },
-            { type: "mrkdwn", text: `*Price Change:*\n${priceChangeText}` }
-          ]
-        },
-        {
-          type: "divider"
-        },
-        {
-          type: "section",
-          fields: [
-            { type: "mrkdwn", text: `*Current Plan:*\n${currentPlanId}\n$${currentPriceFormatted}/mo` },
-            { type: "mrkdwn", text: `*Requested Plan:*\n${requestedPlanName}\n$${requestedPriceFormatted}/mo` }
-          ]
-        },
-        {
-          type: "context",
-          elements: [
-            { type: "mrkdwn", text: `Submitted via Customer Portal • ${new Date().toLocaleString()}` }
-          ]
-        }
-      ]
-    };
-
-    const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${slackToken}`
-      },
-      body: JSON.stringify(slackMessage)
+    const verification = await storage.createPlanChangeVerification({
+      customerId: customerId,
+      customerEmail,
+      subscriptionId,
+      chargebeeCustomerId,
+      mdn,
+      iccid,
+      currentPlanId,
+      currentPlanName,
+      currentPrice,
+      requestedPlanId,
+      requestedPlanName,
+      requestedPrice,
+      thingspacePlanCode,
+      status: 'processing'
     });
 
-    const slackData = await slackResponse.json();
+    const { scheduleSubscriptionPlanChange, addChargebeeCustomerComment, changeDevicePlan } = await import('./services');
+
+    const chargebeeResult = await scheduleSubscriptionPlanChange(subscriptionId, requestedPlanId);
     
-    if (!slackData.ok) {
-      console.error("Slack API error:", slackData.error);
-      return res.status(500).json({ error: "Failed to send request to team" });
+    if (!chargebeeResult.success) {
+      await storage.updatePlanChangeVerification(verification.id, {
+        status: 'failed',
+        verificationError: `Chargebee error: ${chargebeeResult.error}`
+      });
+      return res.status(500).json({ error: chargebeeResult.error || "Failed to update subscription" });
     }
 
-    console.log("Plan change request sent to Slack:", slackData.ts);
-    res.json({ success: true, message: "Plan change request submitted" });
+    await storage.updatePlanChangeVerification(verification.id, {
+      chargebeeUpdated: true,
+      chargebeeNextBillingDate: chargebeeResult.nextBillingDate ? new Date(chargebeeResult.nextBillingDate) : undefined
+    });
+
+    if (chargebeeCustomerId) {
+      const commentText = `Plan change requested by customer via Portal.
+- From: ${currentPlanName || currentPlanId} ($${((currentPrice || 0) / 100).toFixed(2)}/mo)
+- To: ${requestedPlanName || requestedPlanId} ($${((requestedPrice || 0) / 100).toFixed(2)}/mo)
+- Effective: ${chargebeeResult.nextBillingDate ? new Date(chargebeeResult.nextBillingDate).toLocaleDateString() : 'Next billing date'}
+- Subscription ID: ${subscriptionId}
+- ThingSpace Plan Code: ${thingspacePlanCode}`;
+
+      await addChargebeeCustomerComment(chargebeeCustomerId, commentText);
+    }
+
+    const currentThingspacePlanCode = THINGSPACE_PLAN_CODES[currentPlanId as keyof typeof THINGSPACE_PLAN_CODES] || '';
+    const thingspaceResult = await changeDevicePlan(mdn, 'mdn', currentThingspacePlanCode, thingspacePlanCode);
+
+    if (!thingspaceResult.success) {
+      await storage.updatePlanChangeVerification(verification.id, {
+        thingspaceRequested: false,
+        verificationError: `ThingSpace error: ${thingspaceResult.error}`,
+        slackNotificationSent: true
+      });
+
+      await sendPlanChangeSlackAlert('failure', {
+        customerEmail,
+        customerName,
+        subscriptionId,
+        mdn,
+        currentPlan: currentPlanName || currentPlanId,
+        requestedPlan: requestedPlanName || requestedPlanId,
+        error: thingspaceResult.error
+      });
+
+      return res.json({
+        success: true,
+        verificationId: verification.id,
+        message: "Subscription updated. Network change requires manual processing.",
+        nextBillingDate: chargebeeResult.nextBillingDate,
+        thingspaceStatus: 'manual_required'
+      });
+    }
+
+    const verificationScheduledAt = new Date(Date.now() + 5 * 60 * 1000);
+    await storage.updatePlanChangeVerification(verification.id, {
+      thingspaceRequested: true,
+      thingspaceRequestId: thingspaceResult.requestId,
+      verificationScheduledAt,
+      verificationStatus: 'pending'
+    });
+
+    const timeoutId = setTimeout(() => verifyPlanChange(verification.id), 5 * 60 * 1000);
+    pendingVerifications.set(verification.id, timeoutId);
+
+    console.log(`Plan change initiated for ${customerEmail}, verification scheduled in 5 minutes`);
+
+    res.json({
+      success: true,
+      verificationId: verification.id,
+      message: "Plan change initiated successfully",
+      nextBillingDate: chargebeeResult.nextBillingDate,
+      thingspaceStatus: 'processing',
+      verificationScheduledAt: verificationScheduledAt.toISOString()
+    });
   } catch (error: any) {
     console.error("Plan change request error:", error);
     res.status(500).json({ error: error.message || "Failed to submit request" });
+  }
+});
+
+app.get("/api/plan-change-status/:verificationId", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const verificationId = parseInt(req.params.verificationId);
+    if (isNaN(verificationId)) {
+      return res.status(400).json({ error: "Invalid verification ID" });
+    }
+
+    const verification = await storage.getPlanChangeVerification(verificationId);
+    if (!verification) {
+      return res.status(404).json({ error: "Verification not found" });
+    }
+
+    res.json({
+      id: verification.id,
+      status: verification.status,
+      verificationStatus: verification.verificationStatus,
+      chargebeeUpdated: verification.chargebeeUpdated,
+      thingspaceRequested: verification.thingspaceRequested,
+      nextBillingDate: verification.chargebeeNextBillingDate,
+      verificationScheduledAt: verification.verificationScheduledAt,
+      verificationCompletedAt: verification.verificationCompletedAt,
+      error: verification.verificationError
+    });
+  } catch (error: any) {
+    console.error("Error fetching plan change status:", error);
+    res.status(500).json({ error: "Failed to fetch status" });
   }
 });
 
