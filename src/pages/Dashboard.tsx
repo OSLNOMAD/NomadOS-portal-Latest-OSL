@@ -17,6 +17,14 @@ interface Customer {
   createdAt?: string
 }
 
+interface SubscriptionItem {
+  itemPriceId: string
+  itemType: string
+  quantity: number
+  amount: number
+  unitPrice: number
+}
+
 interface ChargebeeSubscription {
   id: string
   planId: string
@@ -34,6 +42,7 @@ interface ChargebeeSubscription {
   imei: string | null
   mdn: string | null
   chargebeeCustomerId?: string
+  subscriptionItems?: SubscriptionItem[]
 }
 
 interface ChargebeeInvoice {
@@ -821,6 +830,20 @@ void collectibleInvoices.length
                                       <p className="font-mono text-xs">{sub.mdn}</p>
                                     </div>
                                   )}
+                                </div>
+                              </div>
+                            )}
+
+                            {sub.subscriptionItems && sub.subscriptionItems.filter(item => item.itemType === 'addon').length > 0 && (
+                              <div className="mt-4 pt-4 border-t border-gray-100">
+                                <p className="text-sm text-muted mb-2">Add-ons</p>
+                                <div className="space-y-2">
+                                  {sub.subscriptionItems.filter(item => item.itemType === 'addon').map((addon, idx) => (
+                                    <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                                      <span className="text-sm font-medium text-text">{getPlanDisplayName(addon.itemPriceId)}</span>
+                                      <span className="text-sm font-semibold text-primary">{formatCurrency(addon.amount)}/{sub.billingPeriodUnit}</span>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             )}
