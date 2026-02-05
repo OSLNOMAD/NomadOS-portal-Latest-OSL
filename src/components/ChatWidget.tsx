@@ -119,30 +119,38 @@ export function ChatWidget({ token, dataLoaded = false }: ChatWidgetProps) {
 
   return (
     <>
-      {/* Chat Button with JADA Avatar */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform z-50 overflow-hidden border-3 border-primary"
-        style={{ 
-          backgroundColor: '#10a37f',
-          borderWidth: '3px',
-          borderColor: '#10a37f'
-        }}
-        aria-label="Chat with JADA AI assistant"
-      >
-        {isOpen ? (
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        ) : (
-          <img 
-            src="/jada-avatar.png" 
-            alt="JADA" 
-            className="w-full h-full object-cover"
-          />
+      {/* Chat Button with JADA Avatar - Left side for AI */}
+      <div className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-50 flex flex-col items-start gap-2">
+        {!isOpen && (
+          <div className="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 border border-gray-200 flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <span>AI Account Help</span>
+          </div>
         )}
-      </button>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-lg flex items-center justify-center hover:scale-105 transition-transform overflow-hidden"
+          style={{ 
+            backgroundColor: '#10a37f',
+            borderWidth: '3px',
+            borderColor: '#10a37f'
+          }}
+          aria-label="Chat with JADA AI - Ask questions about your account"
+        >
+          {isOpen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          ) : (
+            <img 
+              src="/jada-avatar.png" 
+              alt="JADA AI" 
+              className="w-full h-full object-cover"
+            />
+          )}
+        </button>
+      </div>
 
       <AnimatePresence>
         {isOpen && (
@@ -151,7 +159,7 @@ export function ChatWidget({ token, dataLoaded = false }: ChatWidgetProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-4 sm:right-6 w-[calc(100vw-2rem)] sm:w-96 h-[70vh] sm:h-[500px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border border-gray-200"
+            className="fixed bottom-24 left-4 sm:left-6 w-[calc(100vw-2rem)] sm:w-96 h-[70vh] sm:h-[500px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 border border-gray-200"
           >
             {/* Header with JADA branding */}
             <div 
@@ -164,8 +172,8 @@ export function ChatWidget({ token, dataLoaded = false }: ChatWidgetProps) {
                 className="w-10 h-10 rounded-full border-2 border-white/30"
               />
               <div>
-                <h3 className="font-semibold text-lg">JADA</h3>
-                <p className="text-sm opacity-90">Your AI Assistant</p>
+                <h3 className="font-semibold text-lg">JADA AI</h3>
+                <p className="text-sm opacity-90">Ask questions about your account</p>
               </div>
             </div>
 
