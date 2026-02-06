@@ -2420,10 +2420,14 @@ app.post("/api/subscription/pause/execute", async (req, res) => {
       }
     }
 
-    const { subscriptionId, durationMonths } = req.body;
+    const { subscriptionId, durationMonths, pauseReason, pauseReasonDetails } = req.body;
     if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
     if (!durationMonths || durationMonths < 1 || durationMonths > 3) {
       return res.status(400).json({ error: "Duration must be between 1 and 3 months" });
+    }
+    if (!pauseReason) return res.status(400).json({ error: "Pause reason is required" });
+    if (!pauseReasonDetails || !pauseReasonDetails.trim()) {
+      return res.status(400).json({ error: "Please provide details about why you are pausing" });
     }
 
     const fullData = await fetchCustomerFullData(customerEmail);
@@ -2490,6 +2494,8 @@ app.post("/api/subscription/pause/execute", async (req, res) => {
         resumeDate,
         travelAddonAdded: false,
         travelAddonItemPriceId: travelCheck.itemPriceId,
+        pauseReason: pauseReason,
+        pauseReasonDetails: pauseReasonDetails.trim(),
         status: 'active',
       });
 
@@ -3444,6 +3450,92 @@ app.get("/api/admin/cancellations/export", async (req, res) => {
   } catch (error: any) {
     console.error("Export cancellations error:", error);
     res.status(500).json({ error: error.message || "Failed to export cancellations" });
+  }
+});
+
+app.get("/api/admin/pause-logs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const pauses = await storage.getAllSubscriptionPauses();
+    res.json({ pauses });
+  } catch (error: any) {
+    console.error("Get pause logs error:", error);
+    res.status(500).json({ error: error.message || "Failed to get pause logs" });
+  }
+});
+
+app.get("/api/admin/pause-logs/export", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (!decoded.isAdmin) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+    } catch {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const pauses = await storage.getAllSubscriptionPauses();
+
+    const headers = [
+      "ID", "Date", "Customer Email", "Subscription ID", "Chargebee Customer ID",
+      "Duration (months)", "Pause Date", "Resume Date", "Travel Add-on Added",
+      "Travel Add-on ID", "Reason", "Reason Details", "Status"
+    ];
+
+    const escapeCSV = (val: string | number | boolean | null | undefined): string => {
+      if (val === null || val === undefined) return "";
+      const str = String(val);
+      return str.replace(/"/g, '""').replace(/\r?\n/g, ' ');
+    };
+
+    const rows = pauses.map(p => [
+      p.id,
+      p.createdAt ? new Date(p.createdAt).toISOString() : "",
+      escapeCSV(p.customerEmail),
+      escapeCSV(p.subscriptionId),
+      escapeCSV(p.chargebeeCustomerId),
+      p.pauseDurationMonths,
+      p.pauseDate ? new Date(p.pauseDate).toISOString().split('T')[0] : "",
+      p.resumeDate ? new Date(p.resumeDate).toISOString().split('T')[0] : "",
+      p.travelAddonAdded ? "Yes" : "No",
+      escapeCSV(p.travelAddonItemPriceId),
+      escapeCSV(p.pauseReason),
+      escapeCSV(p.pauseReasonDetails),
+      escapeCSV(p.status)
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename=pause-logs-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csvContent);
+  } catch (error: any) {
+    console.error("Export pause logs error:", error);
+    res.status(500).json({ error: error.message || "Failed to export pause logs" });
   }
 });
 

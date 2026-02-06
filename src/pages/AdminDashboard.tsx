@@ -24,6 +24,22 @@ interface PortalSetting {
   updatedBy: string | null
 }
 
+interface PauseLog {
+  id: number
+  customerEmail: string
+  subscriptionId: string
+  chargebeeCustomerId: string | null
+  pauseDurationMonths: number
+  pauseDate: string
+  resumeDate: string
+  travelAddonAdded: boolean | null
+  travelAddonItemPriceId: string | null
+  pauseReason: string | null
+  pauseReasonDetails: string | null
+  status: string | null
+  createdAt: string
+}
+
 interface CancellationRequest {
   id: number
   customerEmail: string
@@ -53,7 +69,7 @@ export default function AdminDashboard() {
   const [responseText, setResponseText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [filter, setFilter] = useState<'all' | 'pending' | 'responded'>('all')
-  const [activeTab, setActiveTab] = useState<'feedback' | 'cancellations' | 'settings'>('feedback')
+  const [activeTab, setActiveTab] = useState<'feedback' | 'cancellations' | 'pause_logs' | 'settings'>('feedback')
   const [settings, setSettings] = useState<PortalSetting[]>([])
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [slackChannelId, setSlackChannelId] = useState('')
@@ -63,6 +79,10 @@ export default function AdminDashboard() {
   const [cancellationsLoading, setCancellationsLoading] = useState(false)
   const [cancellationFilter, setCancellationFilter] = useState<'all' | 'started' | 'submitted' | 'completed'>('all')
   const [exporting, setExporting] = useState(false)
+  const [pauseLogs, setPauseLogs] = useState<PauseLog[]>([])
+  const [pauseLogsLoading, setPauseLogsLoading] = useState(false)
+  const [pauseLogFilter, setPauseLogFilter] = useState<'all' | 'active' | 'completed' | 'cancelled'>('all')
+  const [exportingPauses, setExportingPauses] = useState(false)
   const navigate = useNavigate()
 
   const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}')
@@ -81,6 +101,8 @@ export default function AdminDashboard() {
       fetchSettings()
     } else if (activeTab === 'cancellations') {
       fetchCancellations()
+    } else if (activeTab === 'pause_logs') {
+      fetchPauseLogs()
     }
   }, [activeTab])
 
@@ -226,6 +248,86 @@ export default function AdminDashboard() {
     }
   }
 
+  const fetchPauseLogs = async () => {
+    setPauseLogsLoading(true)
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch('/api/admin/pause-logs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+        navigate('/admin')
+        return
+      }
+
+      if (response.ok) {
+        const data = await response.json()
+        setPauseLogs(data.pauses || [])
+      }
+    } catch (err) {
+      setError('Failed to load pause logs')
+    } finally {
+      setPauseLogsLoading(false)
+    }
+  }
+
+  const handleExportPauseLogs = async () => {
+    setExportingPauses(true)
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch('/api/admin/pause-logs/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+        navigate('/admin')
+        return
+      }
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `pause-logs-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        a.remove()
+      } else {
+        setError('Failed to export pause logs')
+      }
+    } catch (err) {
+      setError('Failed to export pause logs')
+    } finally {
+      setExportingPauses(false)
+    }
+  }
+
+  const filteredPauseLogs = pauseLogs.filter(p => {
+    if (pauseLogFilter === 'all') return true
+    return (p.status || 'active') === pauseLogFilter
+  })
+
+  const formatPauseReason = (reason: string | null) => {
+    if (!reason) return '-'
+    const labels: Record<string, string> = {
+      traveling: 'Traveling',
+      seasonal: 'Seasonal use only',
+      financial: 'Financial reasons',
+      temporary_relocation: 'Temporary relocation',
+      not_using: 'Not currently using',
+      trying_alternative: 'Trying alternative',
+      other: 'Other',
+    }
+    return labels[reason] || reason
+  }
+
   const handleSaveSlackChannel = async () => {
     if (!slackChannelId.trim()) {
       setError('Slack Channel ID is required')
@@ -337,6 +439,17 @@ export default function AdminDashboard() {
             style={activeTab === 'cancellations' ? { borderColor: '#10a37f', color: '#10a37f' } : {}}
           >
             Cancellation Requests
+          </button>
+          <button
+            onClick={() => setActiveTab('pause_logs')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'pause_logs'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+            style={activeTab === 'pause_logs' ? { borderColor: '#10a37f', color: '#10a37f' } : {}}
+          >
+            Pause Logs
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -607,6 +720,151 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'pause_logs' && (
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Pause Logs</h2>
+                <p className="text-gray-600">View all subscription pause requests and reasons</p>
+              </div>
+              <button
+                onClick={handleExportPauseLogs}
+                disabled={exportingPauses}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 self-start"
+                style={{ background: 'linear-gradient(135deg, #10a37f 0%, #0d8a6a 100%)' }}
+              >
+                {exportingPauses ? 'Exporting...' : 'Export CSV'}
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              {(['all', 'active', 'completed', 'cancelled'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setPauseLogFilter(f)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+                    pauseLogFilter === f
+                      ? 'text-white'
+                      : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                  }`}
+                  style={pauseLogFilter === f ? { background: '#10a37f' } : {}}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)} ({f === 'all' ? pauseLogs.length : pauseLogs.filter(p => (p.status || 'active') === f).length})
+                </button>
+              ))}
+            </div>
+
+            {pauseLogsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2" style={{ borderColor: '#10a37f' }}></div>
+              </div>
+            ) : filteredPauseLogs.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                No pause logs found.
+              </div>
+            ) : (
+              <>
+                <div className="sm:hidden space-y-4">
+                  {filteredPauseLogs.map((p) => (
+                    <div key={p.id} className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-900">{p.customerEmail}</span>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                          (p.status || 'active') === 'active' ? 'bg-green-100 text-green-800' :
+                          p.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {(p.status || 'active').charAt(0).toUpperCase() + (p.status || 'active').slice(1)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">{new Date(p.createdAt).toLocaleString()}</div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">Subscription:</span>
+                          <p className="font-mono text-xs">{p.subscriptionId}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Duration:</span>
+                          <p>{p.pauseDurationMonths} month{p.pauseDurationMonths !== 1 ? 's' : ''}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Pause Date:</span>
+                          <p>{p.pauseDate ? new Date(p.pauseDate).toLocaleDateString() : '-'}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Resume Date:</span>
+                          <p>{p.resumeDate ? new Date(p.resumeDate).toLocaleDateString() : '-'}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Reason:</span>
+                        <p className="text-sm font-medium text-gray-800">{formatPauseReason(p.pauseReason)}</p>
+                      </div>
+                      {p.pauseReasonDetails && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <span className="text-xs text-gray-500">Details:</span>
+                          <p className="text-sm text-gray-700 mt-1">{p.pauseReasonDetails}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Date</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Customer</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Subscription</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Duration</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Pause</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Resume</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Reason</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Details</th>
+                        <th className="text-left py-3 px-3 font-medium text-gray-700">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPauseLogs.map((p) => (
+                        <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-3 text-gray-600 whitespace-nowrap">
+                            {new Date(p.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-3 text-gray-900">{p.customerEmail}</td>
+                          <td className="py-3 px-3 font-mono text-xs text-gray-600">{p.subscriptionId}</td>
+                          <td className="py-3 px-3 text-gray-700">
+                            {p.pauseDurationMonths} mo
+                          </td>
+                          <td className="py-3 px-3 text-gray-600 whitespace-nowrap">
+                            {p.pauseDate ? new Date(p.pauseDate).toLocaleDateString() : '-'}
+                          </td>
+                          <td className="py-3 px-3 text-gray-600 whitespace-nowrap">
+                            {p.resumeDate ? new Date(p.resumeDate).toLocaleDateString() : '-'}
+                          </td>
+                          <td className="py-3 px-3 text-gray-700">{formatPauseReason(p.pauseReason)}</td>
+                          <td className="py-3 px-3 text-gray-600 max-w-xs truncate" title={p.pauseReasonDetails || ''}>
+                            {p.pauseReasonDetails || '-'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                              (p.status || 'active') === 'active' ? 'bg-green-100 text-green-800' :
+                              p.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {(p.status || 'active').charAt(0).toUpperCase() + (p.status || 'active').slice(1)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </>
         )}

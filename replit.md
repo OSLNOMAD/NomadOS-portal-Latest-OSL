@@ -46,16 +46,18 @@ The design adheres to official Nomad Internet branding, featuring a modern SaaS 
   - Table displays: date, customer, subscription, MRR ($), reason, discount acceptance, status, Zendesk ticket link
   - API endpoints: GET /api/admin/cancellations, GET /api/admin/cancellations/export
   - Uses existing `cancellation_requests` table data
-- Feb 6, 2026: Pause Subscription Feature
+- Feb 6, 2026: Pause Subscription Feature (Redesigned)
   - "Pause Subscription" button on active subscription cards in Subscriptions tab
-  - Multi-step modal flow: eligibility check, travel add-on requirement, duration selection, confirmation
+  - Redesigned multi-step modal: clear sections for requirement, eligibility, and what happens next
+  - Pause reason collection: dropdown (traveling, seasonal, financial, temporary relocation, not using, trying alternative, other) + required text details
   - Business rules: only paid subscriptions (unpaid must settle balance), requires travel add-on
-  - If travel add-on missing: prompts user to add Nomad Travel Upgrade ($10/mo), charges immediately, polls for payment confirmation
-  - Duration: minimum 1 month, maximum 3 months per pause
-  - 6-month pause limit per 365-day rolling period tracked in `subscription_pauses` database table
-  - Suspend and resume dates are same day of month
-  - Chargebee API integration: POST /subscriptions/{id}/pause with specific_date option
+  - Travel add-on: Nomad Travel Upgrade ($19.95/mo) via `Updated-Nomad-Travel-1995-USD-Monthly`, auto-posts Chargebee comment on add
+  - Pause executes immediately (not next day), resume date aligns with subscription billing day of month
+  - Duration: 1-3 months per pause, 6-month max per 365-day rolling period tracked in `subscription_pauses` table
+  - Database columns: `pause_reason` and `pause_reason_details` for reason tracking
+  - Admin Dashboard: "Pause Logs" tab with filter by status (all/active/completed/cancelled), CSV export
   - API endpoints: POST /api/subscription/pause/check-eligibility, /add-travel-addon, /check-addon-payment, /execute, GET /history/:subscriptionId
+  - Admin API endpoints: GET /api/admin/pause-logs, GET /api/admin/pause-logs/export
   - Service functions: hasTravelAddon, addTravelAddonToSubscription, checkSubscriptionPaymentStatus, pauseChargebeeSubscription
   - PauseSubscriptionModal component with branded design matching portal aesthetic
 - Feb 6, 2026: Credit Notes & Refunds Visibility

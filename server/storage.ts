@@ -51,6 +51,7 @@ export interface IStorage {
   createSubscriptionPause(pause: InsertSubscriptionPause): Promise<SubscriptionPause>;
   getSubscriptionPausesBySubscription(subscriptionId: string): Promise<SubscriptionPause[]>;
   getPauseMonthsUsedInPeriod(subscriptionId: string, periodStart: Date): Promise<number>;
+  getAllSubscriptionPauses(): Promise<SubscriptionPause[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -377,6 +378,10 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return pauses.reduce((total, p) => total + p.pauseDurationMonths, 0);
+  }
+
+  async getAllSubscriptionPauses(): Promise<SubscriptionPause[]> {
+    return db.select().from(subscriptionPauses).orderBy(desc(subscriptionPauses.createdAt));
   }
 }
 
