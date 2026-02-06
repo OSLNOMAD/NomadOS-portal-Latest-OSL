@@ -2400,7 +2400,6 @@ app.post("/api/subscription/pause/execute", async (req, res) => {
       if (decoded.isTest) {
         isTestToken = true;
         customerEmail = decoded.email;
-        customerId = -1;
       }
     } catch (e) {}
     if (!isTestToken) {
@@ -2411,7 +2410,15 @@ app.post("/api/subscription/pause/execute", async (req, res) => {
       customerEmail = customer.email;
       customerId = customer.id;
     }
-    if (!customerEmail || customerId === null) return res.status(401).json({ error: "Unable to identify customer" });
+    if (!customerEmail) return res.status(401).json({ error: "Unable to identify customer" });
+    if (customerId === null) {
+      const customerByEmail = await storage.getCustomerByEmail(customerEmail);
+      if (customerByEmail) {
+        customerId = customerByEmail.id;
+      } else {
+        return res.status(404).json({ error: "Customer not found in database" });
+      }
+    }
 
     const { subscriptionId, durationMonths } = req.body;
     if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
