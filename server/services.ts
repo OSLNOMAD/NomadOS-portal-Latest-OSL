@@ -1309,6 +1309,7 @@ export async function getCreditNotePdfUrl(creditNoteId: string): Promise<{ url: 
 }
 
 export const TRAVEL_ADDON_ITEM_PRICE_IDS = [
+  'Updated-Nomad-Travel-1995-USD-Monthly',
   'Nomad-Travel-Upgrade-1000-USD-Monthly',
   'Nomad-Travel-Upgrade-1000',
   'Nomad-Travel-Upgrade-10.00',
@@ -1329,7 +1330,7 @@ export function hasTravelAddon(subscriptionItems: Array<{ itemPriceId: string; i
 
 export async function addTravelAddonToSubscription(subscriptionId: string): Promise<{ success: boolean; invoiceId?: string; error?: string }> {
   try {
-    const travelAddonItemPriceId = 'Nomad-Travel-Upgrade-1000-USD-Monthly';
+    const travelAddonItemPriceId = 'Updated-Nomad-Travel-1995-USD-Monthly';
 
     const params: Record<string, string> = {
       'subscription_items[item_price_id][0]': travelAddonItemPriceId,
@@ -1346,6 +1347,15 @@ export async function addTravelAddonToSubscription(subscriptionId: string): Prom
 
     if (result?.subscription) {
       const invoiceId = result?.invoice?.id || null;
+      try {
+        await chargebeeApiPost('/comments', {
+          'entity_type': 'subscription',
+          'entity_id': subscriptionId,
+          'notes': 'Customer added the Nomad Travel add-on to their subscription via the Customer Portal.'
+        });
+      } catch (commentErr) {
+        console.error('Failed to add Chargebee comment:', commentErr);
+      }
       return { success: true, invoiceId };
     }
     return { success: false, error: 'Failed to add travel addon to subscription' };

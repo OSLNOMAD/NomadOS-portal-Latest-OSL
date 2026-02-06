@@ -351,7 +351,7 @@ export function PauseSubscriptionModal({ isOpen, onClose, subscription, token, o
                   <div>
                     <h3 className="font-semibold text-blue-800 text-lg">Travel Add-on Required</h3>
                     <p className="text-blue-700 mt-1">
-                      To pause your subscription, you need the <strong>Nomad Travel Upgrade</strong> add-on on your account. This add-on costs <strong>$10.00/month</strong>.
+                      To pause your subscription, you need the <strong>Nomad Travel Upgrade</strong> add-on on your account. This add-on costs <strong>$19.95/month</strong>.
                     </p>
                     <p className="text-blue-600 text-sm mt-2">
                       Would you like to add the Travel Upgrade to your subscription? You will be charged for it before the pause can proceed.
@@ -380,7 +380,7 @@ export function PauseSubscriptionModal({ isOpen, onClose, subscription, token, o
                   className="px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #10a37f, #0d8c6d)' }}
                 >
-                  {loading ? 'Adding...' : 'Add Travel Upgrade ($10.00/mo)'}
+                  {loading ? 'Adding...' : 'Add Travel Upgrade ($19.95/mo)'}
                 </button>
               </div>
             </div>
