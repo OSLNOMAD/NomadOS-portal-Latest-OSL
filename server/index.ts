@@ -2176,6 +2176,307 @@ app.post("/api/admin/feedback/:id/respond", async (req, res) => {
   }
 });
 
+app.post("/api/subscription/pause/check-eligibility", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) return res.status(401).json({ error: "Invalid token" });
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const { subscriptionId } = req.body;
+    if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
+
+    const { hasTravelAddon: hasTravelAddonFn, checkSubscriptionPaymentStatus } = await import('./services');
+    const fullData = await fetchCustomerFullData(customer.email);
+
+    let targetSub: any = null;
+    let targetCustomerId: string = '';
+    for (const cbCust of fullData.chargebee.customers) {
+      for (const sub of cbCust.subscriptions) {
+        if (sub.id === subscriptionId) {
+          targetSub = sub;
+          targetCustomerId = cbCust.id;
+          break;
+        }
+      }
+      if (targetSub) break;
+    }
+
+    if (!targetSub) return res.status(404).json({ error: "Subscription not found" });
+
+    if (targetSub.status !== 'active') {
+      return res.json({
+        eligible: false,
+        reason: 'only_active',
+        message: 'Only active subscriptions can be paused.'
+      });
+    }
+
+    const isPaid = targetSub.totalDues === 0 && targetSub.dueInvoicesCount === 0;
+    if (!isPaid) {
+      return res.json({
+        eligible: false,
+        reason: 'unpaid',
+        message: 'You need to settle your outstanding balance before you can pause your subscription.',
+        totalDues: targetSub.totalDues,
+        dueInvoicesCount: targetSub.dueInvoicesCount
+      });
+    }
+
+    const travelCheck = hasTravelAddonFn(targetSub.subscriptionItems);
+
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const pauseMonthsUsed = await storage.getPauseMonthsUsedInPeriod(subscriptionId, oneYearAgo);
+    const remainingMonths = Math.max(0, 6 - pauseMonthsUsed);
+
+    if (remainingMonths === 0) {
+      return res.json({
+        eligible: false,
+        reason: 'limit_reached',
+        message: 'You have reached the maximum pause limit of 6 months in the past 365 days.',
+        pauseMonthsUsed,
+        remainingMonths: 0
+      });
+    }
+
+    const maxDuration = Math.min(3, remainingMonths);
+
+    res.json({
+      eligible: true,
+      hasTravelAddon: travelCheck.found,
+      travelAddonItemPriceId: travelCheck.itemPriceId,
+      pauseMonthsUsed,
+      remainingMonths,
+      maxDuration,
+      subscriptionId,
+      chargebeeCustomerId: targetCustomerId
+    });
+  } catch (error: any) {
+    console.error("Pause eligibility check error:", error);
+    res.status(500).json({ error: error.message || "Failed to check pause eligibility" });
+  }
+});
+
+app.post("/api/subscription/pause/add-travel-addon", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) return res.status(401).json({ error: "Invalid token" });
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const { subscriptionId } = req.body;
+    if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
+
+    const fullData = await fetchCustomerFullData(customer.email);
+    let ownsSubscription = false;
+    for (const cbCust of fullData.chargebee.customers) {
+      if (cbCust.subscriptions.some(s => s.id === subscriptionId)) {
+        ownsSubscription = true;
+        break;
+      }
+    }
+    if (!ownsSubscription) return res.status(403).json({ error: "You do not own this subscription" });
+
+    const { addTravelAddonToSubscription } = await import('./services');
+    const result = await addTravelAddonToSubscription(subscriptionId);
+
+    if (result.success) {
+      res.json({ success: true, invoiceId: result.invoiceId });
+    } else {
+      res.status(400).json({ error: result.error || "Failed to add travel addon" });
+    }
+  } catch (error: any) {
+    console.error("Add travel addon error:", error);
+    res.status(500).json({ error: error.message || "Failed to add travel addon" });
+  }
+});
+
+app.post("/api/subscription/pause/check-addon-payment", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) return res.status(401).json({ error: "Invalid token" });
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const { subscriptionId } = req.body;
+    if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
+
+    const fullData = await fetchCustomerFullData(customer.email);
+    let targetSub: any = null;
+    for (const cbCust of fullData.chargebee.customers) {
+      for (const sub of cbCust.subscriptions) {
+        if (sub.id === subscriptionId) {
+          targetSub = sub;
+          break;
+        }
+      }
+      if (targetSub) break;
+    }
+    if (!targetSub) return res.status(403).json({ error: "You do not own this subscription" });
+
+    const { checkSubscriptionPaymentStatus, hasTravelAddon: hasTravelAddonFn } = await import('./services');
+    const paymentStatus = await checkSubscriptionPaymentStatus(subscriptionId);
+    const hasTravelNow = hasTravelAddonFn(targetSub.subscriptionItems).found;
+
+    res.json({
+      isPaid: paymentStatus.isPaid,
+      hasTravelAddon: hasTravelNow,
+      totalDues: paymentStatus.totalDues,
+      dueInvoicesCount: paymentStatus.dueInvoicesCount
+    });
+  } catch (error: any) {
+    console.error("Check addon payment error:", error);
+    res.status(500).json({ error: error.message || "Failed to check payment status" });
+  }
+});
+
+app.post("/api/subscription/pause/execute", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) return res.status(401).json({ error: "Invalid token" });
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const { subscriptionId, durationMonths } = req.body;
+    if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
+    if (!durationMonths || durationMonths < 1 || durationMonths > 3) {
+      return res.status(400).json({ error: "Duration must be between 1 and 3 months" });
+    }
+
+    const fullData = await fetchCustomerFullData(customer.email);
+    let targetSub: any = null;
+    let targetCustomerId: string = '';
+    for (const cbCust of fullData.chargebee.customers) {
+      for (const sub of cbCust.subscriptions) {
+        if (sub.id === subscriptionId) {
+          targetSub = sub;
+          targetCustomerId = cbCust.id;
+          break;
+        }
+      }
+      if (targetSub) break;
+    }
+
+    if (!targetSub) return res.status(404).json({ error: "Subscription not found" });
+    if (targetSub.status !== 'active') {
+      return res.status(400).json({ error: "Only active subscriptions can be paused" });
+    }
+
+    const isPaid = targetSub.totalDues === 0 && targetSub.dueInvoicesCount === 0;
+    if (!isPaid) {
+      return res.status(400).json({ error: "Please settle your outstanding balance before pausing" });
+    }
+
+    const { hasTravelAddon: hasTravelAddonFn, pauseChargebeeSubscription } = await import('./services');
+    const travelCheck = hasTravelAddonFn(targetSub.subscriptionItems);
+    if (!travelCheck.found) {
+      return res.status(400).json({ error: "Travel add-on is required to pause subscription" });
+    }
+
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const pauseMonthsUsed = await storage.getPauseMonthsUsedInPeriod(subscriptionId, oneYearAgo);
+    const remainingMonths = Math.max(0, 6 - pauseMonthsUsed);
+
+    if (durationMonths > remainingMonths) {
+      return res.status(400).json({
+        error: `You can only pause for ${remainingMonths} more month(s) in this period`
+      });
+    }
+
+    const now = new Date();
+    const pauseDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    pauseDate.setDate(pauseDate.getDate() + 1);
+    const resumeDate = new Date(pauseDate);
+    resumeDate.setMonth(resumeDate.getMonth() + durationMonths);
+    resumeDate.setDate(pauseDate.getDate());
+
+    const pauseTimestamp = Math.floor(pauseDate.getTime() / 1000);
+    const resumeTimestamp = Math.floor(resumeDate.getTime() / 1000);
+
+    const result = await pauseChargebeeSubscription(subscriptionId, pauseTimestamp, resumeTimestamp);
+
+    if (result.success) {
+      await storage.createSubscriptionPause({
+        customerId: session.customerId,
+        customerEmail: customer.email,
+        subscriptionId,
+        chargebeeCustomerId: targetCustomerId,
+        pauseDurationMonths: durationMonths,
+        pauseDate,
+        resumeDate,
+        travelAddonAdded: false,
+        travelAddonItemPriceId: travelCheck.itemPriceId,
+        status: 'active',
+      });
+
+      res.json({
+        success: true,
+        pauseDate: pauseDate.toISOString(),
+        resumeDate: resumeDate.toISOString(),
+        durationMonths
+      });
+    } else {
+      res.status(400).json({ error: result.error || "Failed to pause subscription" });
+    }
+  } catch (error: any) {
+    console.error("Execute pause error:", error);
+    res.status(500).json({ error: error.message || "Failed to pause subscription" });
+  }
+});
+
+app.get("/api/subscription/pause/history/:subscriptionId", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    const session = await storage.getSessionByToken(token);
+    if (!session) return res.status(401).json({ error: "Invalid token" });
+    const customer = await storage.getCustomer(session.customerId);
+    if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+    const { subscriptionId } = req.params;
+    const fullData = await fetchCustomerFullData(customer.email);
+    let ownsSubscription = false;
+    for (const cbCust of fullData.chargebee.customers) {
+      if (cbCust.subscriptions.some(s => s.id === subscriptionId)) {
+        ownsSubscription = true;
+        break;
+      }
+    }
+    if (!ownsSubscription) return res.status(403).json({ error: "You do not own this subscription" });
+
+    const pauses = await storage.getSubscriptionPausesBySubscription(subscriptionId);
+    res.json({ pauses });
+  } catch (error: any) {
+    console.error("Fetch pause history error:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch pause history" });
+  }
+});
+
 app.post("/api/cancellation/start", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;

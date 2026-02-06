@@ -167,6 +167,22 @@ export const slowSpeedSessions = pgTable("slow_speed_sessions", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const subscriptionPauses = pgTable("subscription_pauses", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id),
+  customerEmail: varchar("customer_email", { length: 255 }).notNull(),
+  subscriptionId: varchar("subscription_id", { length: 255 }).notNull(),
+  chargebeeCustomerId: varchar("chargebee_customer_id", { length: 255 }),
+  pauseDurationMonths: integer("pause_duration_months").notNull(),
+  pauseDate: timestamp("pause_date").notNull(),
+  resumeDate: timestamp("resume_date").notNull(),
+  travelAddonAdded: boolean("travel_addon_added").default(false),
+  travelAddonItemPriceId: varchar("travel_addon_item_price_id", { length: 255 }),
+  status: varchar("status", { length: 50 }).default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const customersRelations = relations(customers, ({ many }) => ({
   otpCodes: many(otpCodes),
   sessions: many(sessions),
@@ -206,6 +222,8 @@ export type CancellationRequest = typeof cancellationRequests.$inferSelect;
 export type InsertCancellationRequest = typeof cancellationRequests.$inferInsert;
 export type PlanChangeVerification = typeof planChangeVerifications.$inferSelect;
 export type InsertPlanChangeVerification = typeof planChangeVerifications.$inferInsert;
+export type SubscriptionPause = typeof subscriptionPauses.$inferSelect;
+export type InsertSubscriptionPause = typeof subscriptionPauses.$inferInsert;
 
 export const insertCustomerSchema = createInsertSchema(customers);
 export const insertOtpCodeSchema = createInsertSchema(otpCodes);

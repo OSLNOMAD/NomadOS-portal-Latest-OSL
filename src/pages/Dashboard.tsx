@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { ChatWidget } from '../components/ChatWidget'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { CancellationModal } from '../components/CancellationModal'
+import { PauseSubscriptionModal } from '../components/PauseSubscriptionModal'
 import { getPlanDisplayName } from '../utils/planNames'
 
 interface Customer {
@@ -214,6 +215,8 @@ export default function Dashboard() {
   const [customerFeedback, setCustomerFeedback] = useState<CustomerFeedback[]>([])
   const [cancellationModalOpen, setCancellationModalOpen] = useState(false)
   const [subscriptionToCancel, setSubscriptionToCancel] = useState<ChargebeeSubscription | null>(null)
+  const [pauseModalOpen, setPauseModalOpen] = useState(false)
+  const [subscriptionToPause, setSubscriptionToPause] = useState<ChargebeeSubscription | null>(null)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [subscriptionForHistory, setSubscriptionForHistory] = useState<string | null>(null)
   const [cancellationHistory, setCancellationHistory] = useState<any[]>([])
@@ -893,6 +896,20 @@ void collectibleInvoices.length
                               >
                                 {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
                               </button>
+                              {sub.status === 'active' && (
+                                <button
+                                  onClick={() => {
+                                    setSubscriptionToPause(sub)
+                                    setPauseModalOpen(true)
+                                  }}
+                                  className="px-4 py-2 text-sm font-medium border rounded-lg transition-colors"
+                                  style={{ color: '#10a37f', borderColor: '#10a37f' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(16,163,127,0.05)' }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+                                >
+                                  Pause Subscription
+                                </button>
+                              )}
                               {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'in_trial') && (
                                 <>
                                   <button
@@ -1781,6 +1798,21 @@ void collectibleInvoices.length
           }}
           subscription={subscriptionToCancel}
           token={authToken}
+        />
+      )}
+
+      {authToken && subscriptionToPause && (
+        <PauseSubscriptionModal
+          isOpen={pauseModalOpen}
+          onClose={() => {
+            setPauseModalOpen(false)
+            setSubscriptionToPause(null)
+          }}
+          subscription={subscriptionToPause}
+          token={authToken}
+          onPauseComplete={() => {
+            window.location.reload()
+          }}
         />
       )}
 

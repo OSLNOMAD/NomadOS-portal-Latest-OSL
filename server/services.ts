@@ -1308,6 +1308,106 @@ export async function getCreditNotePdfUrl(creditNoteId: string): Promise<{ url: 
   }
 }
 
+export const TRAVEL_ADDON_ITEM_PRICE_IDS = [
+  'Nomad-Travel-Upgrade-1000-USD-Monthly',
+  'Nomad-Travel-Upgrade-1000',
+  'Nomad-Travel-Upgrade-10.00',
+];
+
+export function hasTravelAddon(subscriptionItems: Array<{ itemPriceId: string; itemType: string }>): { found: boolean; itemPriceId: string | null } {
+  for (const item of subscriptionItems) {
+    const lowerItemId = item.itemPriceId.toLowerCase();
+    if (lowerItemId.includes('travel-upgrade') || lowerItemId.includes('travel-modem') || lowerItemId.includes('nomad-travel')) {
+      return { found: true, itemPriceId: item.itemPriceId };
+    }
+    if (TRAVEL_ADDON_ITEM_PRICE_IDS.some(id => id === item.itemPriceId)) {
+      return { found: true, itemPriceId: item.itemPriceId };
+    }
+  }
+  return { found: false, itemPriceId: null };
+}
+
+export async function addTravelAddonToSubscription(subscriptionId: string): Promise<{ success: boolean; invoiceId?: string; error?: string }> {
+  try {
+    const travelAddonItemPriceId = 'Nomad-Travel-Upgrade-1000-USD-Monthly';
+
+    const subData = await chargebeeApiGet(`/subscriptions/${subscriptionId}`);
+    if (!subData?.subscription) {
+      return { success: false, error: 'Subscription not found' };
+    }
+
+    const existingItems = subData.subscription.subscription_items || [];
+    const params: Record<string, string> = {
+      'invoice_immediately': 'true',
+      'prorate': 'true',
+    };
+    existingItems.forEach((item: any, index: number) => {
+      params[`subscription_items[item_price_id][${index}]`] = item.item_price_id;
+      params[`subscription_items[quantity][${index}]`] = String(item.quantity || 1);
+    });
+    const newIndex = existingItems.length;
+    params[`subscription_items[item_price_id][${newIndex}]`] = travelAddonItemPriceId;
+    params[`subscription_items[quantity][${newIndex}]`] = '1';
+
+    const result = await chargebeeApiPost(
+      `/subscriptions/${subscriptionId}/update_subscription_for_items`,
+      params
+    );
+
+    if (result?.subscription) {
+      const invoiceId = result?.invoice?.id || null;
+      return { success: true, invoiceId };
+    }
+    return { success: false, error: 'Failed to add travel addon to subscription' };
+  } catch (error: any) {
+    console.error('Error adding travel addon:', error);
+    return { success: false, error: error.message || 'Failed to add travel addon' };
+  }
+}
+
+export async function checkSubscriptionPaymentStatus(subscriptionId: string): Promise<{ isPaid: boolean; totalDues: number; dueInvoicesCount: number }> {
+  try {
+    const subData = await chargebeeApiGet(`/subscriptions/${subscriptionId}`);
+    if (!subData?.subscription) {
+      return { isPaid: false, totalDues: 0, dueInvoicesCount: 0 };
+    }
+    const s = subData.subscription;
+    const totalDues = (s.total_dues || 0) / 100;
+    const dueInvoicesCount = s.due_invoices_count || 0;
+    return {
+      isPaid: totalDues === 0 && dueInvoicesCount === 0,
+      totalDues,
+      dueInvoicesCount
+    };
+  } catch (error) {
+    console.error('Error checking subscription payment status:', error);
+    return { isPaid: false, totalDues: 0, dueInvoicesCount: 0 };
+  }
+}
+
+export async function pauseChargebeeSubscription(
+  subscriptionId: string,
+  pauseDate: number,
+  resumeDate: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await chargebeeApiPost(`/subscriptions/${subscriptionId}/pause`, {
+      'pause_option': 'specific_date',
+      'pause_date': String(pauseDate),
+      'resume_date': String(resumeDate),
+      'unbilled_charges_handling': 'invoice_now',
+    });
+
+    if (result?.subscription) {
+      return { success: true };
+    }
+    return { success: false, error: 'Failed to pause subscription in Chargebee' };
+  } catch (error: any) {
+    console.error('Error pausing subscription:', error);
+    return { success: false, error: error.message || 'Failed to pause subscription' };
+  }
+}
+
 export interface ResumeDeviceResult {
   success: boolean;
   requestId?: string;

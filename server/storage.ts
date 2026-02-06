@@ -1,4 +1,4 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gt, or, desc } from "drizzle-orm";
 
@@ -47,6 +47,10 @@ export interface IStorage {
   getCancellationRequestsByCustomer(customerEmail: string): Promise<CancellationRequest[]>;
   checkRecentDiscountForSubscription(subscriptionId: string): Promise<boolean>;
   getAllCancellationRequests(): Promise<CancellationRequest[]>;
+
+  createSubscriptionPause(pause: InsertSubscriptionPause): Promise<SubscriptionPause>;
+  getSubscriptionPausesBySubscription(subscriptionId: string): Promise<SubscriptionPause[]>;
+  getPauseMonthsUsedInPeriod(subscriptionId: string, periodStart: Date): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -347,6 +351,32 @@ export class DatabaseStorage implements IStorage {
 
   async getAllCancellationRequests(): Promise<CancellationRequest[]> {
     return await db.select().from(cancellationRequests).orderBy(desc(cancellationRequests.createdAt));
+  }
+
+  async createSubscriptionPause(pause: InsertSubscriptionPause): Promise<SubscriptionPause> {
+    const [created] = await db.insert(subscriptionPauses).values(pause).returning();
+    return created;
+  }
+
+  async getSubscriptionPausesBySubscription(subscriptionId: string): Promise<SubscriptionPause[]> {
+    return await db
+      .select()
+      .from(subscriptionPauses)
+      .where(eq(subscriptionPauses.subscriptionId, subscriptionId))
+      .orderBy(desc(subscriptionPauses.createdAt));
+  }
+
+  async getPauseMonthsUsedInPeriod(subscriptionId: string, periodStart: Date): Promise<number> {
+    const pauses = await db
+      .select()
+      .from(subscriptionPauses)
+      .where(
+        and(
+          eq(subscriptionPauses.subscriptionId, subscriptionId),
+          gt(subscriptionPauses.createdAt, periodStart)
+        )
+      );
+    return pauses.reduce((total, p) => total + p.pauseDurationMonths, 0);
   }
 }
 
