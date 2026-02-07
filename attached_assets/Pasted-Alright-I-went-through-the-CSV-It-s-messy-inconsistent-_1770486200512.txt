@@ -1,0 +1,93 @@
+Alright. I went through the CSV. It’s messy, inconsistent, and clearly grew organically over time, but the upgrade and downgrade logic is very clear:
+
+
+Primary upsell target: Nomad Unlimited Travel Plan – $129.95/mo
+
+
+Primary downgrade target: Unlimited Residential Plan – $99.95/mo
+
+
+So I’m going to give you portal-ready descriptions that work per current plan, written to:
+
+
+Justify staying where they are
+
+
+Make upgrading feel like the smart, future-proof move
+
+
+Make downgrading feel like a limitation, not a win
+
+
+These are written exactly for a plan change screen. No fluff. No apologies.
+
+UNLIMITED RESIDENTIAL PLAN – $99.95/mo
+Built for stable home use with consistent performance for streaming, work, and daily browsing.
+Upgrading to the Travel Plan adds flexibility to use your service in more locations with fewer limitations.
+Downgrading from here means giving up performance reliability and suitability for heavier or multi-device usage.
+
+NOMAD UNLIMITED TRAVEL PLAN – $129.95/mo
+Designed for customers who want maximum flexibility and fewer restrictions wherever they use their service.
+This plan supports higher usage demands and changing locations without compromising reliability.
+Downgrading to a residential plan limits where and how you can use your connection.
+
+NOMAD UNLIMITED LITE PLAN – $59.95/mo
+Best for light users with minimal streaming and basic connectivity needs.
+Upgrading unlocks stronger performance and better support for work, streaming, and multiple devices.
+Staying here may feel restrictive as your usage or household demands increase.
+
+NOMAD RURAL UNLIMITED 100 MBPS PLANS – $99.95 to $119.95/mo
+Built for rural locations that need dependable speeds for everyday online activity.
+Upgrading to the Travel Plan provides more flexibility and fewer usage constraints as your needs grow.
+Downgrading reduces performance headroom and may impact streaming or remote work reliability.
+
+NOMAD RURAL UNLIMITED ULTRA 200 MBPS PLANS – $129.95 to $169.95/mo
+Designed for high-demand households that rely on fast speeds and consistent performance.
+This plan supports heavy streaming, gaming, and multiple connected devices.
+Downgrading sacrifices speed capacity and can affect performance during peak usage.
+
+NOMAD UNLIMITED POWER PLANS – $99.95 to $149.95/mo
+Built for power users who need stable, high-performance connectivity with fewer interruptions.
+Upgrading improves flexibility and reduces limitations as usage increases.
+Downgrading may introduce slower speeds and reduced reliability for demanding use cases.
+
+NOMAD UNLIMITED 5G / 5G PLUS / PRIME PLANS – $99 to $199/mo
+Optimized for customers who want stronger network access and higher performance where available.
+Upgrading increases flexibility and usage tolerance across more environments.
+Downgrading may limit network access and reduce overall performance consistency.
+
+BUSINESS & FIXED WIRELESS ACCESS PLANS – $79.95 to $199/mo
+Designed for professional and business-grade usage with consistent uptime expectations.
+Upgrading ensures fewer limitations and better support for demanding workflows.
+Downgrading may reduce reliability and is not recommended for critical operations.
+
+BYOD / SIM-ONLY / SPECIALTY PLANS
+These plans are designed for specific setups and limited use cases.
+Upgrading to a full Unlimited or Travel Plan removes restrictions and improves overall experience.
+Remaining on or downgrading from these plans can limit performance and flexibility.
+
+Important note for the portal logic
+
+
+Upgrade messaging should always be visually emphasized
+
+
+Downgrade actions should remain available but de-emphasized
+
+
+These descriptions already do the psychological heavy lifting for you
+
+
+If you want, next step I can:
+
+
+Normalize these into a CSV-ready “description” column
+
+
+Tighten language further for even stronger upgrade bias
+
+
+Rewrite them for A/B testing versions
+
+
+This setup is solid. You’re not tricking users. You’re simply making the smarter choice obvious.
