@@ -45,6 +45,17 @@ interface ChargebeeSubscription {
   mdn: string | null
   chargebeeCustomerId?: string
   subscriptionItems?: SubscriptionItem[]
+  hasScheduledChanges?: boolean
+  scheduledChanges?: {
+    planId: string
+    planAmount: number
+    items: Array<{
+      itemPriceId: string
+      itemType: string
+      quantity: number
+      amount: number
+    }>
+  }
 }
 
 interface ChargebeeInvoice {
@@ -877,6 +888,37 @@ void collectibleInvoices.length
                               </div>
                             )}
 
+                            {sub.hasScheduledChanges && sub.scheduledChanges && (
+                              <div className="mt-4 pt-4 border-t border-gray-100">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                  <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div className="flex-1">
+                                      <p className="text-sm font-semibold text-blue-800">Scheduled Plan Change</p>
+                                      <p className="text-sm text-blue-700 mt-1">
+                                        Your plan will change to <span className="font-semibold">{getPlanDisplayName(sub.scheduledChanges.planId)}</span> at{' '}
+                                        <span className="font-semibold">{formatCurrency(sub.scheduledChanges.planAmount)}/{sub.billingPeriodUnit}</span> on your next billing date ({formatDate(sub.nextBillingAt)}).
+                                      </p>
+                                      {sub.scheduledChanges.items.filter(item => item.itemType === 'addon').length > 0 && (
+                                        <div className="mt-2">
+                                          <p className="text-xs text-blue-600 font-medium">Add-ons will continue:</p>
+                                          <div className="mt-1 space-y-1">
+                                            {sub.scheduledChanges.items.filter(item => item.itemType === 'addon').map((addon, idx) => (
+                                              <p key={idx} className="text-xs text-blue-700">
+                                                {getPlanDisplayName(addon.itemPriceId)} — {formatCurrency(addon.amount)}/{sub.billingPeriodUnit}
+                                              </p>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-3">
                               <button
                                 onClick={() => openSubscriptionDetail(sub, cbCustomer)}
@@ -900,7 +942,7 @@ void collectibleInvoices.length
                               >
                                 {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
                               </button>
-                              {sub.status === 'active' && isPlanChangeEligible(sub.planId) && (
+                              {sub.status === 'active' && isPlanChangeEligible(sub.planId) && !sub.hasScheduledChanges && (
                                 <button
                                   onClick={() => {
                                     setSubscriptionToChangePlan(sub)

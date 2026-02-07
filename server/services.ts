@@ -69,6 +69,17 @@ export interface ChargebeeSubscription {
     amount: number;
     unitPrice: number;
   }>;
+  hasScheduledChanges: boolean;
+  scheduledChanges?: {
+    planId: string;
+    planAmount: number;
+    items: Array<{
+      itemPriceId: string;
+      itemType: string;
+      quantity: number;
+      amount: number;
+    }>;
+  };
   shippingAddress?: {
     line1: string;
     city: string;
@@ -537,6 +548,7 @@ function parseChargebeeSubscription(s: any): ChargebeeSubscription {
     iccid: s.cf_SIM_ID_ICCID || null,
     imei: s.cf_Device_IMEI || null,
     mdn: s.cf_mdn || null,
+    hasScheduledChanges: s.has_scheduled_changes || false,
     subscriptionItems: (s.subscription_items || []).map((si: any) => ({
       itemPriceId: si.item_price_id,
       itemType: si.item_type,
@@ -671,11 +683,39 @@ export async function fetchChargebeeData(email: string): Promise<ChargebeeData> 
         chargebeeApiGet(`/payment_sources?customer_id[is]=${c.id}`)
       ]);
       
-      const subscriptions = subsData?.list?.map((i: any) => parseChargebeeSubscription(i.subscription)) || [];
+      let subscriptions = subsData?.list?.map((i: any) => parseChargebeeSubscription(i.subscription)) || [];
       const invoices = invoicesData?.list?.map((i: any) => parseChargebeeInvoice(i.invoice)) || [];
       const transactions = txnData?.list?.map((i: any) => parseChargebeeTransaction(i.transaction)) || [];
       const creditNotes = creditNotesData?.list?.map((i: any) => parseChargebeeCreditNote(i.credit_note)) || [];
       const paymentSources = paymentSourcesData?.list || [];
+
+      const subsWithScheduledChanges = subscriptions.filter(s => s.hasScheduledChanges);
+      if (subsWithScheduledChanges.length > 0) {
+        const scheduledResults = await Promise.all(
+          subsWithScheduledChanges.map(s =>
+            chargebeeApiGet(`/subscriptions/${s.id}/retrieve_with_scheduled_changes`).catch(() => null)
+          )
+        );
+        for (let i = 0; i < subsWithScheduledChanges.length; i++) {
+          const scheduled = scheduledResults[i]?.subscription;
+          if (scheduled) {
+            const subToUpdate = subscriptions.find(s => s.id === subsWithScheduledChanges[i].id);
+            if (subToUpdate) {
+              const planItem = (scheduled.subscription_items || []).find((si: any) => si.item_type === 'plan');
+              subToUpdate.scheduledChanges = {
+                planId: planItem?.item_price_id || '',
+                planAmount: (planItem?.amount || 0) / 100,
+                items: (scheduled.subscription_items || []).map((si: any) => ({
+                  itemPriceId: si.item_price_id,
+                  itemType: si.item_type,
+                  quantity: si.quantity || 1,
+                  amount: (si.amount || 0) / 100,
+                })),
+              };
+            }
+          }
+        }
+      }
       
       const customerWithData: ChargebeeCustomerWithData = {
         ...customer,
