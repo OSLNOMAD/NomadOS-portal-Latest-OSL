@@ -901,18 +901,6 @@ void collectibleInvoices.length
                                         Your plan will change to <span className="font-semibold">{getPlanDisplayName(sub.scheduledChanges.planId)}</span> at{' '}
                                         <span className="font-semibold">{formatCurrency(sub.scheduledChanges.planAmount)}/{sub.billingPeriodUnit}</span> on your next billing date ({formatDate(sub.nextBillingAt)}).
                                       </p>
-                                      {sub.scheduledChanges.items.filter(item => item.itemType === 'addon').length > 0 && (
-                                        <div className="mt-2">
-                                          <p className="text-xs text-blue-600 font-medium">Add-ons will continue:</p>
-                                          <div className="mt-1 space-y-1">
-                                            {sub.scheduledChanges.items.filter(item => item.itemType === 'addon').map((addon, idx) => (
-                                              <p key={idx} className="text-xs text-blue-700">
-                                                {getPlanDisplayName(addon.itemPriceId)} — {formatCurrency(addon.amount)}/{sub.billingPeriodUnit}
-                                              </p>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
                                     </div>
                                   </div>
                                 </div>
