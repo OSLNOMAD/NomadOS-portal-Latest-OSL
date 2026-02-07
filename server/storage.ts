@@ -1,4 +1,4 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, planChangeVerifications, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause, type PlanChangeVerification, type InsertPlanChangeVerification } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gt, or, desc } from "drizzle-orm";
 
@@ -52,6 +52,9 @@ export interface IStorage {
   getSubscriptionPausesBySubscription(subscriptionId: string): Promise<SubscriptionPause[]>;
   getPauseMonthsUsedInPeriod(subscriptionId: string, periodStart: Date): Promise<number>;
   getAllSubscriptionPauses(): Promise<SubscriptionPause[]>;
+
+  createPlanChangeVerification(data: InsertPlanChangeVerification): Promise<PlanChangeVerification>;
+  getAllPlanChangeVerifications(): Promise<PlanChangeVerification[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -382,6 +385,15 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSubscriptionPauses(): Promise<SubscriptionPause[]> {
     return db.select().from(subscriptionPauses).orderBy(desc(subscriptionPauses.createdAt));
+  }
+
+  async createPlanChangeVerification(data: InsertPlanChangeVerification): Promise<PlanChangeVerification> {
+    const [created] = await db.insert(planChangeVerifications).values(data).returning();
+    return created;
+  }
+
+  async getAllPlanChangeVerifications(): Promise<PlanChangeVerification[]> {
+    return db.select().from(planChangeVerifications).orderBy(desc(planChangeVerifications.createdAt));
   }
 }
 

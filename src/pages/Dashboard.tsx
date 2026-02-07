@@ -4,7 +4,9 @@ import { ChatWidget } from '../components/ChatWidget'
 import { FeedbackButton } from '../components/FeedbackButton'
 import { CancellationModal } from '../components/CancellationModal'
 import { PauseSubscriptionModal } from '../components/PauseSubscriptionModal'
+import { PlanChangeModal } from '../components/PlanChangeModal'
 import { getPlanDisplayName } from '../utils/planNames'
+import { isPlanChangeEligible } from '../../shared/planChangeConfig'
 
 interface Customer {
   id: number
@@ -217,6 +219,8 @@ export default function Dashboard() {
   const [subscriptionToCancel, setSubscriptionToCancel] = useState<ChargebeeSubscription | null>(null)
   const [pauseModalOpen, setPauseModalOpen] = useState(false)
   const [subscriptionToPause, setSubscriptionToPause] = useState<ChargebeeSubscription | null>(null)
+  const [planChangeModalOpen, setPlanChangeModalOpen] = useState(false)
+  const [subscriptionToChangePlan, setSubscriptionToChangePlan] = useState<ChargebeeSubscription | null>(null)
   const [historyModalOpen, setHistoryModalOpen] = useState(false)
   const [subscriptionForHistory, setSubscriptionForHistory] = useState<string | null>(null)
   const [cancellationHistory, setCancellationHistory] = useState<any[]>([])
@@ -896,6 +900,17 @@ void collectibleInvoices.length
                               >
                                 {paymentLoading === 'update' ? 'Loading...' : 'Update Payment Method'}
                               </button>
+                              {sub.status === 'active' && isPlanChangeEligible(sub.planId) && (
+                                <button
+                                  onClick={() => {
+                                    setSubscriptionToChangePlan(sub)
+                                    setPlanChangeModalOpen(true)
+                                  }}
+                                  className="px-4 py-2 text-sm font-medium border rounded-lg transition-colors text-blue-600 border-blue-400 hover:bg-blue-50"
+                                >
+                                  Change Plan
+                                </button>
+                              )}
                               {sub.status === 'active' && (
                                 <button
                                   onClick={() => {
@@ -1811,6 +1826,21 @@ void collectibleInvoices.length
           subscription={subscriptionToPause}
           token={authToken}
           onPauseComplete={() => {
+            window.location.reload()
+          }}
+        />
+      )}
+
+      {authToken && subscriptionToChangePlan && (
+        <PlanChangeModal
+          isOpen={planChangeModalOpen}
+          onClose={() => {
+            setPlanChangeModalOpen(false)
+            setSubscriptionToChangePlan(null)
+          }}
+          subscription={subscriptionToChangePlan}
+          token={authToken}
+          onPlanChangeComplete={() => {
             window.location.reload()
           }}
         />

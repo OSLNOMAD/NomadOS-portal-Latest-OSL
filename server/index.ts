@@ -3718,6 +3718,192 @@ app.get("/api/admin/chargebee-catalog", async (req, res) => {
   }
 });
 
+app.get("/api/plan-change/options", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+
+    const planId = req.query.planId as string;
+    if (!planId) return res.status(400).json({ error: "Plan ID is required" });
+
+    const { getPlanChangeOptions } = await import('../shared/planChangeConfig');
+    const options = getPlanChangeOptions(planId);
+
+    res.json({ options: options || [] });
+  } catch (error: any) {
+    console.error("Get plan change options error:", error);
+    res.status(500).json({ error: error.message || "Failed to get plan options" });
+  }
+});
+
+app.post("/api/plan-change/execute", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    let customerEmail: string | null = null;
+    let customerId: number | null = null;
+    let isTestToken = false;
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (decoded.isTest) {
+        isTestToken = true;
+        customerEmail = decoded.email;
+      }
+    } catch (e) {}
+    if (!isTestToken) {
+      const session = await storage.getSessionByToken(token);
+      if (!session) return res.status(401).json({ error: "Invalid or expired session" });
+      const customer = await storage.getCustomer(session.customerId);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+      customerEmail = customer.email;
+      customerId = customer.id;
+    }
+    if (!customerEmail) return res.status(401).json({ error: "Unable to identify customer" });
+    if (customerId === null) {
+      const customerByEmail = await storage.getCustomerByEmail(customerEmail);
+      if (customerByEmail) {
+        customerId = customerByEmail.id;
+      } else {
+        return res.status(404).json({ error: "Customer not found in database" });
+      }
+    }
+
+    const { subscriptionId, newPlanId, chargebeeCustomerId } = req.body;
+    if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
+    if (!newPlanId) return res.status(400).json({ error: "New plan ID is required" });
+
+    const { getPlanChangeOptions } = await import('../shared/planChangeConfig');
+    const { fetchCustomerFullData } = await import('./services');
+
+    const fullData = await fetchCustomerFullData(customerEmail);
+    let targetSub: any = null;
+    let targetChargebeeCustomerId: string = '';
+    for (const cbCust of fullData.chargebee.customers) {
+      for (const sub of cbCust.subscriptions) {
+        if (sub.id === subscriptionId) {
+          targetSub = sub;
+          targetChargebeeCustomerId = cbCust.id;
+          break;
+        }
+      }
+      if (targetSub) break;
+    }
+
+    if (!targetSub) return res.status(404).json({ error: "Subscription not found" });
+    if (targetSub.status !== 'active') {
+      return res.status(400).json({ error: "Only active subscriptions can change plans" });
+    }
+
+    const options = getPlanChangeOptions(targetSub.planId);
+    if (!options || !options.find((o: any) => o.planId === newPlanId)) {
+      return res.status(400).json({ error: "This plan change is not allowed for your current plan" });
+    }
+
+    const selectedOption = options.find((o: any) => o.planId === newPlanId)!;
+
+    const { changeSubscriptionPlan } = await import('./services');
+    const result = await changeSubscriptionPlan(subscriptionId, newPlanId);
+
+    if (result.success) {
+      await storage.createPlanChangeVerification({
+        customerId,
+        customerEmail,
+        subscriptionId,
+        chargebeeCustomerId: chargebeeCustomerId || targetChargebeeCustomerId,
+        currentPlanId: targetSub.planId,
+        currentPlanName: targetSub.planName || targetSub.planId,
+        currentPrice: Math.round(targetSub.planAmount * 100),
+        requestedPlanId: newPlanId,
+        requestedPlanName: newPlanId,
+        requestedPrice: Math.round(selectedOption.price * 100),
+        status: 'completed',
+        chargebeeUpdated: true,
+      });
+
+      return res.json({ success: true, message: "Plan change scheduled successfully" });
+    } else {
+      return res.status(500).json({ error: result.error || "Failed to change plan" });
+    }
+  } catch (error: any) {
+    console.error("Plan change execution error:", error);
+    res.status(500).json({ error: error.message || "Failed to execute plan change" });
+  }
+});
+
+app.get("/api/admin/plan-changes", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (!decoded.isAdmin) return res.status(403).json({ error: "Admin access required" });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid admin token" });
+    }
+
+    const planChanges = await storage.getAllPlanChangeVerifications();
+    res.json({ planChanges });
+  } catch (error: any) {
+    console.error("Get plan changes error:", error);
+    res.status(500).json({ error: error.message || "Failed to get plan changes" });
+  }
+});
+
+app.get("/api/admin/plan-changes/export", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (!decoded.isAdmin) return res.status(403).json({ error: "Admin access required" });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid admin token" });
+    }
+
+    const planChanges = await storage.getAllPlanChangeVerifications();
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const s = String(val);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+
+    const headers = ['Date', 'Customer Email', 'Subscription ID', 'Current Plan', 'Current Price', 'New Plan', 'New Price', 'Status'];
+    const rows = planChanges.map(pc => [
+      pc.createdAt ? new Date(pc.createdAt).toISOString() : '',
+      escapeCSV(pc.customerEmail),
+      escapeCSV(pc.subscriptionId),
+      escapeCSV(pc.currentPlanId),
+      pc.currentPrice ? `$${(pc.currentPrice / 100).toFixed(2)}` : '',
+      escapeCSV(pc.requestedPlanId),
+      pc.requestedPrice ? `$${(pc.requestedPrice / 100).toFixed(2)}` : '',
+      escapeCSV(pc.status)
+    ].join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=plan-changes.csv');
+    res.send(csv);
+  } catch (error: any) {
+    console.error("Export plan changes error:", error);
+    res.status(500).json({ error: error.message || "Failed to export plan changes" });
+  }
+});
+
 if (process.env.NODE_ENV === "production") {
   const distPath = path.join(__dirname, "..", "dist");
   app.use(express.static(distPath));

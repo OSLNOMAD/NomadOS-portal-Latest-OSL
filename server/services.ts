@@ -1412,6 +1412,43 @@ export async function pauseChargebeeSubscription(
   }
 }
 
+export async function changeSubscriptionPlan(
+  subscriptionId: string,
+  newItemPriceId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const params: Record<string, string> = {
+      'subscription_items[item_price_id][0]': newItemPriceId,
+      'subscription_items[quantity][0]': '1',
+      'replace_items_list': 'true',
+      'end_of_term': 'true',
+      'prorate': 'false',
+    };
+
+    const result = await chargebeeApiPost(
+      `/subscriptions/${subscriptionId}/update_for_items`,
+      params
+    );
+
+    if (result?.subscription) {
+      try {
+        await chargebeeApiPost('/comments', {
+          'entity_type': 'subscription',
+          'entity_id': subscriptionId,
+          'notes': `Customer changed plan to ${newItemPriceId} via the Customer Portal. Change will take effect at end of current billing term.`
+        });
+      } catch (commentErr) {
+        console.error('Failed to add Chargebee comment for plan change:', commentErr);
+      }
+      return { success: true };
+    }
+    return { success: false, error: 'Failed to change subscription plan in Chargebee' };
+  } catch (error: any) {
+    console.error('Error changing subscription plan:', error);
+    return { success: false, error: error.message || 'Failed to change subscription plan' };
+  }
+}
+
 export interface ResumeDeviceResult {
   success: boolean;
   requestId?: string;
