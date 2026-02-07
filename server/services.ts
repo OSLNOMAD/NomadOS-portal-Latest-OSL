@@ -1417,13 +1417,27 @@ export async function changeSubscriptionPlan(
   newItemPriceId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const subData = await chargebeeApiGet(`/subscriptions/${subscriptionId}`);
+    const currentItems = subData?.subscription?.subscription_items || [];
+
     const params: Record<string, string> = {
       'subscription_items[item_price_id][0]': newItemPriceId,
       'subscription_items[quantity][0]': '1',
-      'replace_items_list': 'true',
       'end_of_term': 'true',
       'prorate': 'false',
+      'replace_items_list': 'true',
     };
+
+    let itemIndex = 1;
+    for (const item of currentItems) {
+      if (item.item_type === 'plan') continue;
+      params[`subscription_items[item_price_id][${itemIndex}]`] = item.item_price_id;
+      params[`subscription_items[quantity][${itemIndex}]`] = String(item.quantity || 1);
+      if (item.unit_price !== undefined && item.unit_price !== null) {
+        params[`subscription_items[unit_price][${itemIndex}]`] = String(item.unit_price);
+      }
+      itemIndex++;
+    }
 
     const result = await chargebeeApiPost(
       `/subscriptions/${subscriptionId}/update_for_items`,
