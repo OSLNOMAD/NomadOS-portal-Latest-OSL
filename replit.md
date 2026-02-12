@@ -23,13 +23,15 @@ The design adheres to Nomad Internet's official branding with a modern SaaS aest
 - **Customer Feedback System**: Allows customers to submit and view feedback, with an admin interface for management and response.
 - **Credit Notes & Refunds Visibility**: Fetches and displays credit notes from Chargebee, providing detailed views and PDF downloads.
 - **Add-on Management**: Customers can add and remove subscription add-ons (e.g., Travel Add-on) via a dedicated modal. Features de-duplication logic for Travel add-on variants, upsell-biased UI encouraging add-on purchases, and retention messaging discouraging removal. Backend verifies subscription ownership before any changes.
+- **External API Logging**: All outgoing requests to external services (Chargebee, Shopify, Shipstation, ThingSpace) are logged via a `loggedFetch` wrapper in services.ts, capturing service name, endpoint, method, status code, response time, success/failure, customer email, and trigger source. Logs are stored in the `external_api_logs` database table and viewable in the Admin Dashboard's "API Logs" tab with filtering by service and CSV export.
+- **Rate Limiting**: In-memory rate limiting middleware protects customer-facing API routes from spam/reload abuse. Three tiers: `heavyApiLimiter` (3 requests/60s for full-data loads, device actions, add-on operations), `customerApiLimiter` (5 requests/30s for device status, plans, chat), and `authLimiter` (10 requests/60s for sign-in, OTP, password reset). Returns HTTP 429 with retry-after header when exceeded.
 
 ### Feature Specifications
 - **Sign-Up & Sign-In Flows**: Comprehensive flows including email and phone OTP verification, secure password handling, and passwordless options.
 - **Account Management**: Functionality for users to update personal information (name, password, phone number).
 - **Dashboard**: A centralized view with dedicated tabs for managing subscriptions, viewing orders, accessing invoices, and monitoring internet device status.
 - **Troubleshooting**: Automated line status checks, suspended line auto-restoration, escalation to support, and specific guidance for active lines, including detailed slow speed diagnostics.
-- **Admin Dashboard**: Secure admin login and dashboard for managing customer feedback, cancellation requests, and viewing subscription pause logs.
+- **Admin Dashboard**: Secure admin login and dashboard for managing customer feedback, cancellation requests, viewing subscription pause logs, add-on operation logs, and external API request logs with filtering and CSV export.
 
 ## External Dependencies
 - **Chargebee**: Billing, subscriptions, invoices, transactions, customer management.

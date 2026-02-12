@@ -6,10 +6,62 @@ import bcrypt from "bcryptjs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { storage } from "./storage";
-import { fetchCustomerFullData, fetchChargebeeCatalogItems, fetchChargebeeItemPrices, removeAddonFromSubscription, getSubscriptionCurrentItems, addTravelAddonToSubscription, addPrimeAddonToSubscription, verifySubscriptionOwnership } from "./services";
+import { fetchCustomerFullData, fetchChargebeeCatalogItems, fetchChargebeeItemPrices, removeAddonFromSubscription, getSubscriptionCurrentItems, addTravelAddonToSubscription, addPrimeAddonToSubscription, verifySubscriptionOwnership, setApiLogContext, clearApiLogContext } from "./services";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimiter(windowMs: number, maxRequests: number) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    let key = req.ip || 'unknown';
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded: any = jwt.verify(token, JWT_SECRET!);
+        key = `user:${decoded.customerId || decoded.email || key}`;
+      } catch {
+        key = `ip:${key}`;
+      }
+    } else {
+      key = `ip:${key}`;
+    }
+
+    const routeKey = `${key}:${req.path}`;
+    const now = Date.now();
+    const entry = rateLimitStore.get(routeKey);
+
+    if (entry && now < entry.resetAt) {
+      if (entry.count >= maxRequests) {
+        res.setHeader('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
+        return res.status(429).json({
+          error: 'Too many requests. Please wait before trying again.',
+          retryAfter: Math.ceil((entry.resetAt - now) / 1000)
+        });
+      }
+      entry.count++;
+    } else {
+      rateLimitStore.set(routeKey, { count: 1, resetAt: now + windowMs });
+    }
+
+    next();
+  };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore.entries()) {
+    if (now >= entry.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 60000);
+
+const customerApiLimiter = rateLimiter(30000, 5);
+const heavyApiLimiter = rateLimiter(60000, 3);
+const authLimiter = rateLimiter(60000, 10);
 
 const app = express();
 const PORT = process.env.NODE_ENV === "production" ? 5000 : 3001;
@@ -56,7 +108,7 @@ app.post("/api/auth/check-email", async (req, res) => {
   }
 });
 
-app.post("/api/auth/send-phone-otp", async (req, res) => {
+app.post("/api/auth/send-phone-otp", authLimiter, async (req, res) => {
   try {
     const { phone, customerId } = req.body;
 
@@ -120,7 +172,7 @@ app.post("/api/auth/verify-phone-otp", async (req, res) => {
   }
 });
 
-app.post("/api/auth/send-email-otp", async (req, res) => {
+app.post("/api/auth/send-email-otp", authLimiter, async (req, res) => {
   try {
     const { email, customerId } = req.body;
 
@@ -244,7 +296,7 @@ app.post("/api/auth/complete-signup", async (req, res) => {
   }
 });
 
-app.post("/api/auth/signin", async (req, res) => {
+app.post("/api/auth/signin", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -334,7 +386,7 @@ app.post("/api/auth/test-login", async (req, res) => {
   }
 });
 
-app.post("/api/auth/signin-otp", async (req, res) => {
+app.post("/api/auth/signin-otp", authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -522,7 +574,7 @@ app.post("/api/auth/check-existing-user", async (req, res) => {
   }
 });
 
-app.post("/api/auth/forgot-password", async (req, res) => {
+app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -822,7 +874,7 @@ app.post("/api/auth/verify-phone-change", async (req, res) => {
   }
 });
 
-app.get("/api/customer/full-data", async (req, res) => {
+app.get("/api/customer/full-data", heavyApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
@@ -848,15 +900,21 @@ app.get("/api/customer/full-data", async (req, res) => {
       email = customer.email;
     }
 
-    const fullData = await fetchCustomerFullData(email);
-    res.json(fullData);
+    setApiLogContext({ customerEmail: email, triggeredBy: 'customer-full-data' });
+    try {
+      const fullData = await fetchCustomerFullData(email);
+      res.json(fullData);
+    } finally {
+      clearApiLogContext();
+    }
   } catch (error) {
     console.error("Fetch full data error:", error);
+    clearApiLogContext();
     res.status(500).json({ error: "Failed to fetch customer data" });
   }
 });
 
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", customerApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -887,17 +945,22 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const { handleChatMessage } = await import('./chat');
-    const fullData = await fetchCustomerFullData(email);
-    const result = await handleChatMessage(
-      fullData,
-      email,
-      message,
-      conversationHistory || []
-    );
-
-    res.json(result);
+    setApiLogContext({ customerEmail: email, triggeredBy: 'chat' });
+    try {
+      const { handleChatMessage } = await import('./chat');
+      const fullData = await fetchCustomerFullData(email);
+      const result = await handleChatMessage(
+        fullData,
+        email,
+        message,
+        conversationHistory || []
+      );
+      res.json(result);
+    } finally {
+      clearApiLogContext();
+    }
   } catch (error: any) {
+    clearApiLogContext();
     console.error("Chat error:", error);
     res.status(500).json({ error: error.message || "Failed to process chat message" });
   }
@@ -1173,7 +1236,7 @@ app.get("/api/billing/credit-note/:creditNoteId/pdf", async (req, res) => {
   }
 });
 
-app.post("/api/device/suspend", async (req, res) => {
+app.post("/api/device/suspend", heavyApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -1231,7 +1294,7 @@ app.post("/api/device/suspend", async (req, res) => {
   }
 });
 
-app.post("/api/device/resume", async (req, res) => {
+app.post("/api/device/resume", heavyApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -1289,7 +1352,7 @@ app.post("/api/device/resume", async (req, res) => {
   }
 });
 
-app.post("/api/device/status", async (req, res) => {
+app.post("/api/device/status", customerApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -1329,15 +1392,21 @@ app.post("/api/device/status", async (req, res) => {
       return res.status(400).json({ error: "Device identifier is required" });
     }
 
-    const { getDeviceStatus } = await import('./services');
-    const device = await getDeviceStatus(identifier, identifierType);
+    setApiLogContext({ customerEmail: customerEmail || undefined, triggeredBy: 'device-status' });
+    try {
+      const { getDeviceStatus } = await import('./services');
+      const device = await getDeviceStatus(identifier, identifierType);
 
-    if (!device) {
-      return res.status(404).json({ error: "Device not found" });
+      if (!device) {
+        return res.status(404).json({ error: "Device not found" });
+      }
+
+      res.json({ success: true, device });
+    } finally {
+      clearApiLogContext();
     }
-
-    res.json({ success: true, device });
   } catch (error: any) {
+    clearApiLogContext();
     console.error("Device status error:", error);
     res.status(500).json({ error: error.message || "Failed to get device status" });
   }
@@ -2034,7 +2103,7 @@ app.get("/api/slow-speed/session/:sessionId", async (req, res) => {
   }
 });
 
-app.get("/api/device/plans", async (req, res) => {
+app.get("/api/device/plans", customerApiLimiter, async (req, res) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) {
@@ -4028,6 +4097,120 @@ app.get("/api/admin/addon-logs/export", async (req, res) => {
   }
 });
 
+app.get("/api/admin/api-logs", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (!decoded.isAdmin) return res.status(403).json({ error: "Admin access required" });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid admin token" });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 500;
+    const apiLogs = await storage.getExternalApiLogs(Math.min(limit, 2000));
+    res.json({ apiLogs });
+  } catch (error: any) {
+    console.error("Get API logs error:", error);
+    res.status(500).json({ error: error.message || "Failed to get API logs" });
+  }
+});
+
+app.get("/api/admin/api-logs/export", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (!decoded.isAdmin) return res.status(403).json({ error: "Admin access required" });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid admin token" });
+    }
+
+    const apiLogs = await storage.getExternalApiLogs(2000);
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const s = String(val);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    };
+
+    const headers = ['Date', 'Service', 'Endpoint', 'Method', 'Status Code', 'Duration (ms)', 'Success', 'Error', 'Customer Email', 'Triggered By'];
+    const rows = apiLogs.map(log => [
+      log.createdAt ? new Date(log.createdAt).toISOString() : '',
+      escapeCSV(log.service),
+      escapeCSV(log.endpoint),
+      escapeCSV(log.method),
+      log.statusCode || '',
+      log.durationMs || '',
+      log.success ? 'Yes' : 'No',
+      escapeCSV(log.errorMessage),
+      escapeCSV(log.customerEmail),
+      escapeCSV(log.triggeredBy)
+    ].join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=api-logs-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  } catch (error: any) {
+    console.error("Export API logs error:", error);
+    res.status(500).json({ error: error.message || "Failed to export API logs" });
+  }
+});
+
+app.get("/api/admin/api-logs/stats", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No authorization token provided" });
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      if (!decoded.isAdmin) return res.status(403).json({ error: "Admin access required" });
+    } catch (e) {
+      return res.status(401).json({ error: "Invalid admin token" });
+    }
+
+    const apiLogs = await storage.getExternalApiLogs(2000);
+    const now = Date.now();
+    const last24h = apiLogs.filter(l => l.createdAt && (now - new Date(l.createdAt).getTime()) < 86400000);
+
+    const byService: Record<string, { total: number; failed: number; avgDuration: number }> = {};
+    for (const log of last24h) {
+      if (!byService[log.service]) {
+        byService[log.service] = { total: 0, failed: 0, avgDuration: 0 };
+      }
+      byService[log.service].total++;
+      if (!log.success) byService[log.service].failed++;
+      byService[log.service].avgDuration += (log.durationMs || 0);
+    }
+    for (const svc of Object.keys(byService)) {
+      byService[svc].avgDuration = Math.round(byService[svc].avgDuration / byService[svc].total);
+    }
+
+    res.json({
+      totalLast24h: last24h.length,
+      failedLast24h: last24h.filter(l => !l.success).length,
+      byService
+    });
+  } catch (error: any) {
+    console.error("Get API stats error:", error);
+    res.status(500).json({ error: error.message || "Failed to get API stats" });
+  }
+});
+
 if (process.env.NODE_ENV === "production") {
   const distPath = path.join(__dirname, "..", "dist");
   app.use(express.static(distPath));
@@ -4055,7 +4238,7 @@ async function seedPortalSettings() {
   }
 }
 
-app.get("/api/subscription/addons/available", async (req, res) => {
+app.get("/api/subscription/addons/available", customerApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: "Unauthorized" });
@@ -4096,7 +4279,7 @@ app.get("/api/subscription/addons/available", async (req, res) => {
   }
 });
 
-app.post("/api/subscription/addons/add", async (req, res) => {
+app.post("/api/subscription/addons/add", heavyApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: "Unauthorized" });
@@ -4171,7 +4354,7 @@ app.post("/api/subscription/addons/add", async (req, res) => {
   }
 });
 
-app.post("/api/subscription/addons/remove", async (req, res) => {
+app.post("/api/subscription/addons/remove", heavyApiLimiter, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: "Unauthorized" });

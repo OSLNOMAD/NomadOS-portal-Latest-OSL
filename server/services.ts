@@ -1,3 +1,5 @@
+import { storage } from './storage';
+
 const CHARGEBEE_API_KEY = process.env.CHARGEBEE_API_KEY;
 const CHARGEBEE_SITE = process.env.CHARGEBEE_SITE;
 const SHOPIFY_ADMIN_KEY = process.env.SHOPIFY_ADMIN_KEY;
@@ -8,6 +10,83 @@ const THINGSPACE_CLIENT_SECRET = process.env.THINGSPACE_CLIENT_SECRET;
 const THINGSPACE_USERNAME = process.env.THINGSPACE_USERNAME;
 const THINGSPACE_PASSWORD = process.env.THINGSPACE_PASSWORD;
 const THINGSPACE_ACCOUNT_NAME = process.env.THINGSPACE_ACCOUNT_NAME;
+
+export interface ApiLogContext {
+  customerEmail?: string;
+  triggeredBy?: string;
+}
+
+let _apiLogContext: ApiLogContext = {};
+
+export function setApiLogContext(ctx: ApiLogContext) {
+  _apiLogContext = ctx;
+}
+
+export function clearApiLogContext() {
+  _apiLogContext = {};
+}
+
+function detectService(url: string): string {
+  if (url.includes('chargebee.com')) return 'chargebee';
+  if (url.includes('myshopify.com')) return 'shopify';
+  if (url.includes('shipstation.com')) return 'shipstation';
+  if (url.includes('thingspace.verizon.com')) return 'thingspace';
+  if (url.includes('lrlos.com')) return 'lrlos';
+  return 'unknown';
+}
+
+function sanitizeEndpoint(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname + (u.search ? u.search.replace(/email[^&]*/gi, 'email=***').replace(/password[^&]*/gi, 'password=***') : '');
+  } catch {
+    return url.substring(0, 200);
+  }
+}
+
+async function loggedFetch(url: string, options?: RequestInit): Promise<Response> {
+  const service = detectService(url);
+  const endpoint = sanitizeEndpoint(url);
+  const method = options?.method || 'GET';
+  const start = Date.now();
+  const ctx = { ..._apiLogContext };
+
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+    const durationMs = Date.now() - start;
+
+    storage.createExternalApiLog({
+      service,
+      endpoint,
+      method,
+      statusCode: response.status,
+      durationMs,
+      success: response.ok,
+      errorMessage: response.ok ? null : `HTTP ${response.status}`,
+      customerEmail: ctx.customerEmail || null,
+      triggeredBy: ctx.triggeredBy || null,
+    }).catch(err => console.error('Failed to log external API call:', err));
+
+    return response;
+  } catch (error: any) {
+    const durationMs = Date.now() - start;
+
+    storage.createExternalApiLog({
+      service,
+      endpoint,
+      method,
+      statusCode: null,
+      durationMs,
+      success: false,
+      errorMessage: error.message || 'Network error',
+      customerEmail: ctx.customerEmail || null,
+      triggeredBy: ctx.triggeredBy || null,
+    }).catch(err => console.error('Failed to log external API call:', err));
+
+    throw error;
+  }
+}
 
 export interface ChargebeeCustomer {
   id: string;
@@ -465,7 +544,7 @@ async function chargebeeApiGet(endpoint: string): Promise<any> {
   if (!CHARGEBEE_API_KEY || !CHARGEBEE_SITE) return null;
   
   const credentials = Buffer.from(`${CHARGEBEE_API_KEY}:`).toString('base64');
-  const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2${endpoint}`, {
+  const response = await loggedFetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2${endpoint}`, {
     method: 'GET',
     headers: {
       'Authorization': `Basic ${credentials}`,
@@ -747,7 +826,7 @@ export async function fetchShopifyOrders(email: string): Promise<ShopifyOrder[]>
   if (!SHOPIFY_ADMIN_KEY) return [];
   
   try {
-    const response = await fetch(
+    const response = await loggedFetch(
       `https://nomadinternet.myshopify.com/admin/api/2024-01/orders.json?status=any&email=${encodeURIComponent(email)}&limit=250`,
       {
         method: 'GET',
@@ -859,7 +938,7 @@ export async function fetchShipstationOrdersByNumbers(orderNumbers: string[]): P
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(
+        const response = await loggedFetch(
           `https://ssapi.shipstation.com/orders?orderNumber=${encodeURIComponent(cleanOrderNumber)}`,
           {
             method: 'GET',
@@ -1086,7 +1165,7 @@ async function getThingspaceTokens(): Promise<{ oauth: string; session: string }
   try {
     const credentials = Buffer.from(`${THINGSPACE_CLIENT_ID}:${THINGSPACE_CLIENT_SECRET}`).toString('base64');
     
-    const oauthResponse = await fetch('https://thingspace.verizon.com/api/ts/v1/oauth2/token', {
+    const oauthResponse = await loggedFetch('https://thingspace.verizon.com/api/ts/v1/oauth2/token', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
@@ -1100,7 +1179,7 @@ async function getThingspaceTokens(): Promise<{ oauth: string; session: string }
     const oauthData = await oauthResponse.json() as any;
     const oauthToken = oauthData.access_token;
     
-    const sessionResponse = await fetch('https://thingspace.verizon.com/api/m2m/v1/session/login', {
+    const sessionResponse = await loggedFetch('https://thingspace.verizon.com/api/m2m/v1/session/login', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${oauthToken}`,
@@ -1130,7 +1209,7 @@ export async function fetchThingspaceDevice(iccid: string): Promise<ThingspaceDe
   if (!tokens) return null;
   
   try {
-    const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/list', {
+    const response = await loggedFetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/list', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokens.oauth}`,
@@ -1249,7 +1328,7 @@ async function chargebeeApiPost(endpoint: string, data: Record<string, string>):
     formData.append(key, value);
   }
   
-  const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2${endpoint}`, {
+  const response = await loggedFetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2${endpoint}`, {
     method: 'POST',
     headers: {
       'Authorization': `Basic ${credentials}`,
@@ -1687,7 +1766,7 @@ export async function suspendDevice(identifier: string, identifierType: 'iccid' 
   }
   
   try {
-    const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/suspend', {
+    const response = await loggedFetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/suspend', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokens.oauth}`,
@@ -1739,7 +1818,7 @@ export async function resumeDevice(identifier: string, identifierType: 'iccid' |
   }
   
   try {
-    const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/restore', {
+    const response = await loggedFetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/restore', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokens.oauth}`,
@@ -1787,7 +1866,7 @@ export async function getDeviceStatus(identifier: string, identifierType: 'iccid
   if (!tokens) return null;
   
   try {
-    const response = await fetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/list', {
+    const response = await loggedFetch('https://thingspace.verizon.com/api/m2m/v1/devices/actions/list', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokens.oauth}`,
@@ -1868,7 +1947,7 @@ export async function getAvailablePlans(): Promise<ServicePlan[] | null> {
   if (!tokens) return null;
   
   try {
-    const response = await fetch(`https://thingspace.verizon.com/api/m2m/v1/plans/${THINGSPACE_ACCOUNT_NAME}`, {
+    const response = await loggedFetch(`https://thingspace.verizon.com/api/m2m/v1/plans/${THINGSPACE_ACCOUNT_NAME}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${tokens.oauth}`,
@@ -1910,7 +1989,7 @@ export async function addChargebeeCustomerComment(
     formData.append('entity_id', customerId);
     formData.append('notes', comment);
     
-    const response = await fetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2/comments`, {
+    const response = await loggedFetch(`https://${CHARGEBEE_SITE}.chargebee.com/api/v2/comments`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
@@ -1970,7 +2049,7 @@ export async function fetchChargebeeCatalogItems(): Promise<{
         params.append('offset', offset);
       }
       
-      const response = await fetch(
+      const response = await loggedFetch(
         `https://${CHARGEBEE_SITE}.chargebee.com/api/v2/items?${params.toString()}`,
         {
           method: 'GET',
@@ -2063,7 +2142,7 @@ export async function fetchChargebeeItemPrices(): Promise<{
         params.append('offset', offset);
       }
       
-      const response = await fetch(
+      const response = await loggedFetch(
         `https://${CHARGEBEE_SITE}.chargebee.com/api/v2/item_prices?${params.toString()}`,
         {
           method: 'GET',

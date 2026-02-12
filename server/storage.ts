@@ -1,4 +1,4 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, planChangeVerifications, addonLogs, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause, type PlanChangeVerification, type InsertPlanChangeVerification, type AddonLog, type InsertAddonLog } from "../shared/schema";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, planChangeVerifications, addonLogs, externalApiLogs, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause, type PlanChangeVerification, type InsertPlanChangeVerification, type AddonLog, type InsertAddonLog, type ExternalApiLog, type InsertExternalApiLog } from "../shared/schema";
 import { db } from "./db";
 import { eq, and, gt, or, desc } from "drizzle-orm";
 
@@ -58,6 +58,9 @@ export interface IStorage {
 
   createAddonLog(data: InsertAddonLog): Promise<AddonLog>;
   getAllAddonLogs(): Promise<AddonLog[]>;
+
+  createExternalApiLog(data: InsertExternalApiLog): Promise<ExternalApiLog>;
+  getExternalApiLogs(limit?: number): Promise<ExternalApiLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -406,6 +409,15 @@ export class DatabaseStorage implements IStorage {
 
   async getAllAddonLogs(): Promise<AddonLog[]> {
     return db.select().from(addonLogs).orderBy(desc(addonLogs.createdAt));
+  }
+
+  async createExternalApiLog(data: InsertExternalApiLog): Promise<ExternalApiLog> {
+    const [created] = await db.insert(externalApiLogs).values(data).returning();
+    return created;
+  }
+
+  async getExternalApiLogs(limit: number = 500): Promise<ExternalApiLog[]> {
+    return db.select().from(externalApiLogs).orderBy(desc(externalApiLogs.createdAt)).limit(limit);
   }
 }
 

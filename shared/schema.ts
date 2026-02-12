@@ -202,6 +202,20 @@ export const addonLogs = pgTable("addon_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const externalApiLogs = pgTable("external_api_logs", {
+  id: serial("id").primaryKey(),
+  service: varchar("service", { length: 50 }).notNull(),
+  endpoint: varchar("endpoint", { length: 500 }).notNull(),
+  method: varchar("method", { length: 10 }).notNull(),
+  statusCode: integer("status_code"),
+  durationMs: integer("duration_ms"),
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+  customerEmail: varchar("customer_email", { length: 255 }),
+  triggeredBy: varchar("triggered_by", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const customersRelations = relations(customers, ({ many }) => ({
   otpCodes: many(otpCodes),
   sessions: many(sessions),
@@ -245,6 +259,8 @@ export type SubscriptionPause = typeof subscriptionPauses.$inferSelect;
 export type InsertSubscriptionPause = typeof subscriptionPauses.$inferInsert;
 export type AddonLog = typeof addonLogs.$inferSelect;
 export type InsertAddonLog = typeof addonLogs.$inferInsert;
+export type ExternalApiLog = typeof externalApiLogs.$inferSelect;
+export type InsertExternalApiLog = typeof externalApiLogs.$inferInsert;
 
 export const insertCustomerSchema = createInsertSchema(customers);
 export const insertOtpCodeSchema = createInsertSchema(otpCodes);

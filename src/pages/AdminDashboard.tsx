@@ -77,6 +77,20 @@ interface AddonLog {
   createdAt: string
 }
 
+interface ApiLog {
+  id: number
+  service: string
+  endpoint: string
+  method: string
+  statusCode: number | null
+  durationMs: number | null
+  success: boolean
+  errorMessage: string | null
+  customerEmail: string | null
+  triggeredBy: string | null
+  createdAt: string
+}
+
 export default function AdminDashboard() {
   const [feedback, setFeedback] = useState<Feedback[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,7 +99,7 @@ export default function AdminDashboard() {
   const [responseText, setResponseText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [filter, setFilter] = useState<'all' | 'pending' | 'responded'>('all')
-  const [activeTab, setActiveTab] = useState<'feedback' | 'cancellations' | 'pause_logs' | 'plan_changes' | 'addon_logs' | 'settings'>('feedback')
+  const [activeTab, setActiveTab] = useState<'feedback' | 'cancellations' | 'pause_logs' | 'plan_changes' | 'addon_logs' | 'api_logs' | 'settings'>('feedback')
   const [settings, setSettings] = useState<PortalSetting[]>([])
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [slackChannelId, setSlackChannelId] = useState('')
@@ -107,6 +121,10 @@ export default function AdminDashboard() {
   const [addonLogsLoading, setAddonLogsLoading] = useState(false)
   const [addonLogFilter, setAddonLogFilter] = useState<'all' | 'add' | 'remove' | 'completed' | 'failed'>('all')
   const [exportingAddonLogs, setExportingAddonLogs] = useState(false)
+  const [apiLogs, setApiLogs] = useState<ApiLog[]>([])
+  const [apiLogsLoading, setApiLogsLoading] = useState(false)
+  const [apiLogFilter, setApiLogFilter] = useState<'all' | 'chargebee' | 'shopify' | 'shipstation' | 'thingspace' | 'failed'>('all')
+  const [exportingApiLogs, setExportingApiLogs] = useState(false)
   const navigate = useNavigate()
 
   const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}')
@@ -131,6 +149,8 @@ export default function AdminDashboard() {
       fetchPlanChanges()
     } else if (activeTab === 'addon_logs') {
       fetchAddonLogs()
+    } else if (activeTab === 'api_logs') {
+      fetchApiLogs()
     }
   }, [activeTab])
 
@@ -392,6 +412,30 @@ export default function AdminDashboard() {
     }
   }
 
+  const fetchApiLogs = async () => {
+    setApiLogsLoading(true)
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch('/api/admin/api-logs?limit=500', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+        navigate('/admin')
+        return
+      }
+      if (response.ok) {
+        const data = await response.json()
+        setApiLogs(data.apiLogs || [])
+      }
+    } catch (err) {
+      setError('Failed to load API logs')
+    } finally {
+      setApiLogsLoading(false)
+    }
+  }
+
   const handleExportPlanChanges = async () => {
     setExportingPlanChanges(true)
     try {
@@ -460,6 +504,39 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleExportApiLogs = async () => {
+    setExportingApiLogs(true)
+    try {
+      const token = localStorage.getItem('admin_token')
+      const response = await fetch('/api/admin/api-logs/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('admin_token')
+        localStorage.removeItem('admin_user')
+        navigate('/admin')
+        return
+      }
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `api-logs-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        a.remove()
+      } else {
+        setError('Failed to export API logs')
+      }
+    } catch (err) {
+      setError('Failed to export API logs')
+    } finally {
+      setExportingApiLogs(false)
+    }
+  }
+
   const filteredPlanChanges = planChanges.filter(pc => {
     if (planChangeFilter === 'all') return true
     return (pc.status || 'pending') === planChangeFilter
@@ -469,6 +546,12 @@ export default function AdminDashboard() {
     if (addonLogFilter === 'all') return true
     if (addonLogFilter === 'add' || addonLogFilter === 'remove') return log.action === addonLogFilter
     return (log.status || 'completed') === addonLogFilter
+  })
+
+  const filteredApiLogs = apiLogs.filter(log => {
+    if (apiLogFilter === 'all') return true
+    if (apiLogFilter === 'failed') return !log.success
+    return log.service === apiLogFilter
   })
 
   const formatPauseReason = (reason: string | null) => {
@@ -629,6 +712,17 @@ export default function AdminDashboard() {
             style={activeTab === 'addon_logs' ? { borderColor: '#10a37f', color: '#10a37f' } : {}}
           >
             Add-on Logs
+          </button>
+          <button
+            onClick={() => setActiveTab('api_logs')}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'api_logs'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
+            style={activeTab === 'api_logs' ? { borderColor: '#10a37f', color: '#10a37f' } : {}}
+          >
+            API Logs
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -1218,6 +1312,119 @@ export default function AdminDashboard() {
                           }`}>
                             {log.status || 'completed'}
                           </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'api_logs' && (
+          <>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">External API Request Logs</h2>
+                <p className="text-gray-600">Monitor all outgoing API requests to Chargebee, Shopify, Shipstation, ThingSpace</p>
+              </div>
+              <button
+                onClick={handleExportApiLogs}
+                disabled={exportingApiLogs || filteredApiLogs.length === 0}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50"
+                style={{ backgroundColor: '#10a37f' }}
+              >
+                {exportingApiLogs ? 'Exporting...' : 'Export CSV'}
+              </button>
+            </div>
+
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {(['all', 'chargebee', 'shopify', 'shipstation', 'thingspace', 'failed'] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setApiLogFilter(filter)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    apiLogFilter === filter
+                      ? 'text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  style={apiLogFilter === filter ? { backgroundColor: filter === 'failed' ? '#ef4444' : '#10a37f' } : {}}
+                >
+                  {filter === 'all' ? 'All' : filter === 'failed' ? 'Failed' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {apiLogsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 border-4 border-gray-200 rounded-full animate-spin" style={{ borderTopColor: '#10a37f' }}></div>
+              </div>
+            ) : filteredApiLogs.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 rounded-lg">
+                <p className="text-gray-500">No API logs found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Time</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Service</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Endpoint</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Method</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Status</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Duration</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Customer</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-600">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredApiLogs.map((log) => (
+                      <tr key={log.id} className={`border-b border-gray-100 hover:bg-gray-50 ${!log.success ? 'bg-red-50' : ''}`}>
+                        <td className="py-3 px-4 text-gray-600 text-xs">
+                          {log.createdAt ? new Date(log.createdAt).toLocaleString() : '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                            log.service === 'chargebee' ? 'bg-purple-100 text-purple-700' :
+                            log.service === 'shopify' ? 'bg-green-100 text-green-700' :
+                            log.service === 'shipstation' ? 'bg-blue-100 text-blue-700' :
+                            log.service === 'thingspace' ? 'bg-orange-100 text-orange-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {log.service}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 font-mono text-xs max-w-xs truncate" title={log.endpoint}>
+                          {log.endpoint}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                            log.method === 'GET' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                            {log.method}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-sm">
+                          <span className={log.statusCode && log.statusCode >= 400 ? 'text-red-600 font-bold' : 'text-gray-700'}>
+                            {log.statusCode || '-'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600">
+                          {log.durationMs ? `${log.durationMs}ms` : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 text-xs">
+                          {log.customerEmail || '-'}
+                        </td>
+                        <td className="py-3 px-4">
+                          {log.success ? (
+                            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">OK</span>
+                          ) : (
+                            <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700" title={log.errorMessage || ''}>
+                              Failed
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
