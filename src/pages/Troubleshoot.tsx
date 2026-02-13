@@ -69,6 +69,7 @@ export default function Troubleshoot() {
   const [ticketSubmitting, setTicketSubmitting] = useState(false);
   const [ticketError, setTicketError] = useState('');
   const [supportTicketId, setSupportTicketId] = useState('');
+  const [troubleshootBranch, setTroubleshootBranch] = useState<'no_internet' | 'slow_speed' | null>(null);
   
   const [slowSpeedSessionId, setSlowSpeedSessionId] = useState<number | null>(null);
   const [slowSpeedEligibility, setSlowSpeedEligibility] = useState<{
@@ -286,7 +287,7 @@ export default function Troubleshoot() {
     }
   };
 
-  const submitTroubleshootingTicket = async (issueType: string) => {
+  const submitTroubleshootingTicket = async () => {
     const token = getToken();
     if (!token) return;
 
@@ -294,6 +295,8 @@ export default function Troubleshoot() {
     setTicketError('');
 
     try {
+      const issueType = troubleshootBranch === 'no_internet' ? 'no_internet' : 'slow_speed';
+
       const stepsCompleted = issueType === 'slow_speed'
         ? [
             issueOnset ? `Issue onset: ${issueOnset === 'just_started' ? 'Just started' : 'Ongoing issue'}` : null,
@@ -302,7 +305,20 @@ export default function Troubleshoot() {
             'Performed device power cycle',
             outdoorTestResult ? `Outdoor speed test: ${outdoorTestResult === 'improved' ? 'Speeds improved outdoors' : 'Speeds same indoors and outdoors'}` : null,
           ].filter(Boolean).join('\n- ')
-        : 'Automated line restoration attempted via portal (suspend/resume cycle completed)';
+        : [
+            'Customer reported internet not working',
+            'Modem reboot instructions provided',
+            'Issue persisted after reboot - customer requested support'
+          ].join('\n- ');
+
+      let servicePlan = '';
+      try {
+        const customerData = subscriptionData || await fetchCustomerData();
+        const subscription = customerData?.chargebee?.customers?.[0]?.subscriptions?.find(
+          (sub: any) => sub.subscription?.id === subscriptionId
+        )?.subscription;
+        servicePlan = subscription?.plan_id || subscription?.plan_name || '';
+      } catch {}
 
       const response = await fetch('/api/troubleshooting/submit-ticket', {
         method: 'POST',
@@ -321,6 +337,7 @@ export default function Troubleshoot() {
           callTime: preferredCallTime || undefined,
           additionalNotes: ticketNotes,
           lineStatus: lineStatus || 'Unknown',
+          servicePlan: servicePlan || undefined,
           troubleshootingSteps: `- ${stepsCompleted}`
         })
       });
@@ -835,6 +852,7 @@ export default function Troubleshoot() {
               
               <button
                 onClick={() => {
+                  setTroubleshootBranch('no_internet');
                   setContactMethod(null);
                   setContactPhone('');
                   setPreferredCallTime('');
@@ -1407,6 +1425,7 @@ export default function Troubleshoot() {
                       sessionState: 'escalated'
                     });
                   }
+                  setTroubleshootBranch('slow_speed');
                   setContactMethod(null);
                   setContactPhone('');
                   setPreferredCallTime('');
@@ -1599,6 +1618,7 @@ export default function Troubleshoot() {
                 </button>
                 <button
                   onClick={() => {
+                    setTroubleshootBranch('no_internet');
                     setContactMethod(null);
                     setContactPhone('');
                     setPreferredCallTime('');
@@ -1815,12 +1835,7 @@ export default function Troubleshoot() {
                 )}
 
                 <button
-                  onClick={() => {
-                    const issueType = lineStatus && ['suspended', 'suspend'].some(s => (lineStatus || '').toLowerCase().includes(s))
-                      ? 'line_restoration'
-                      : 'slow_speed';
-                    submitTroubleshootingTicket(issueType);
-                  }}
+                  onClick={() => submitTroubleshootingTicket()}
                   disabled={ticketSubmitting || !contactMethod || ticketNotes.trim().length < 10 || (contactMethod === 'phone' && !contactPhone)}
                   className="w-full px-6 py-3 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: '#6366f1' }}

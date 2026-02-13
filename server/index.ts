@@ -1706,6 +1706,7 @@ app.post("/api/troubleshooting/submit-ticket", customerApiLimiter, async (req, r
       callTime,
       additionalNotes,
       lineStatus,
+      servicePlan,
       troubleshootingSteps
     } = req.body;
 
@@ -1734,7 +1735,7 @@ app.post("/api/troubleshooting/submit-ticket", customerApiLimiter, async (req, r
 
     if (zendeskSubdomain && zendeskEmail && zendeskToken) {
       try {
-        const issueLabel = issueType === 'slow_speed' ? 'Slow Speed' : issueType === 'line_restoration' ? 'Line Restoration' : (issueType || 'General').replace(/_/g, ' ');
+        const issueLabel = issueType === 'slow_speed' ? 'Slow Speed' : issueType === 'no_internet' ? 'No Internet' : issueType === 'line_restoration' ? 'Line Restoration' : (issueType || 'General').replace(/_/g, ' ');
 
         const ticketBody: any = {
           ticket: {
@@ -1756,6 +1757,7 @@ ICCID: ${iccid || "N/A"}
 IMEI: ${imei || "N/A"}
 MDN: ${mdn || "N/A"}
 Current Line Status: ${lineStatus || "Unknown"}
+Service Plan: ${servicePlan || "N/A"}
 
 ═══════════════════════════════════════
 ISSUE DETAILS
