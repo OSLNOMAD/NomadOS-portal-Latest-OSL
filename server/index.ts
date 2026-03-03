@@ -67,8 +67,7 @@ const app = express();
 const PORT = process.env.NODE_ENV === "production" ? 5000 : 3001;
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  console.error("JWT_SECRET environment variable is required");
-  process.exit(1);
+  throw new Error("JWT_SECRET environment variable is required");
 }
 
 app.use(cors());
