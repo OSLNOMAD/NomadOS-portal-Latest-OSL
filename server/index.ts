@@ -5,8 +5,8 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { storage } from "./storage";
-import { fetchCustomerFullData, fetchChargebeeCatalogItems, fetchChargebeeItemPrices, removeAddonFromSubscription, getSubscriptionCurrentItems, addTravelAddonToSubscription, addPrimeAddonToSubscription, verifySubscriptionOwnership, setApiLogContext, clearApiLogContext } from "./services";
+import { storage } from "./storage.js";
+import { fetchCustomerFullData, fetchChargebeeCatalogItems, fetchChargebeeItemPrices, removeAddonFromSubscription, getSubscriptionCurrentItems, addTravelAddonToSubscription, addPrimeAddonToSubscription, verifySubscriptionOwnership, setApiLogContext, clearApiLogContext } from "./services.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,7 +85,7 @@ app.post("/api/auth/check-email", async (req, res) => {
       return res.status(400).json({ error: "Email is required" });
     }
 
-    const { checkChargebeeCustomer } = await import('./services');
+    const { checkChargebeeCustomer } = await import('./services.js');
     const { found: customerFound, customer: chargebeeCustomer } = await checkChargebeeCustomer(email);
 
     let customer = await storage.getCustomerByEmail(email);
@@ -946,7 +946,7 @@ app.post("/api/chat", customerApiLimiter, async (req, res) => {
 
     setApiLogContext({ customerEmail: email, triggeredBy: 'chat' });
     try {
-      const { handleChatMessage } = await import('./chat');
+      const { handleChatMessage } = await import('./chat.js');
       const fullData = await fetchCustomerFullData(email);
       const result = await handleChatMessage(
         fullData,
@@ -1005,7 +1005,7 @@ app.post("/api/billing/collect-now-url", async (req, res) => {
       return res.status(400).json({ error: "Chargebee customer ID is required" });
     }
 
-    const { createCollectNowHostedPage } = await import('./services');
+    const { createCollectNowHostedPage } = await import('./services.js');
     const result = await createCollectNowHostedPage(
       chargebeeCustomerId,
       redirectUrl || `${req.protocol}://${req.get('host')}/dashboard?payment=success`
@@ -1062,7 +1062,7 @@ app.post("/api/billing/update-payment-method-url", async (req, res) => {
       return res.status(400).json({ error: "Chargebee customer ID is required" });
     }
 
-    const { createUpdatePaymentMethodHostedPage } = await import('./services');
+    const { createUpdatePaymentMethodHostedPage } = await import('./services.js');
     const result = await createUpdatePaymentMethodHostedPage(
       chargebeeCustomerId,
       redirectUrl || `${req.protocol}://${req.get('host')}/dashboard?payment_updated=success`
@@ -1102,7 +1102,7 @@ app.post("/api/billing/collect-payment", async (req, res) => {
       return res.status(400).json({ error: "Invoice ID is required" });
     }
 
-    const { fetchChargebeeData, collectPaymentForInvoice } = await import('./services');
+    const { fetchChargebeeData, collectPaymentForInvoice } = await import('./services.js');
     const chargebeeData = await fetchChargebeeData(customer.email);
 
     const allInvoiceIds = chargebeeData.customers.flatMap(c => c.invoices.map(inv => inv.id));
@@ -1158,7 +1158,7 @@ app.get("/api/billing/invoice/:invoiceId/pdf", async (req, res) => {
       return res.status(400).json({ error: "Invoice ID is required" });
     }
 
-    const { fetchChargebeeData, getInvoicePdfUrl } = await import('./services');
+    const { fetchChargebeeData, getInvoicePdfUrl } = await import('./services.js');
     const chargebeeData = await fetchChargebeeData(customerEmail);
 
     const allInvoiceIds = chargebeeData.customers.flatMap(c => c.invoices.map(inv => inv.id));
@@ -1214,7 +1214,7 @@ app.get("/api/billing/credit-note/:creditNoteId/pdf", async (req, res) => {
       return res.status(400).json({ error: "Credit Note ID is required" });
     }
 
-    const { fetchChargebeeData, getCreditNotePdfUrl } = await import('./services');
+    const { fetchChargebeeData, getCreditNotePdfUrl } = await import('./services.js');
     const chargebeeData = await fetchChargebeeData(customerEmail);
 
     const allCreditNoteIds = chargebeeData.customers.flatMap(c => c.creditNotes.map(cn => cn.id));
@@ -1275,7 +1275,7 @@ app.post("/api/device/suspend", heavyApiLimiter, async (req, res) => {
       return res.status(400).json({ error: "Device identifier is required" });
     }
 
-    const { suspendDevice } = await import('./services');
+    const { suspendDevice } = await import('./services.js');
     const result = await suspendDevice(identifier, identifierType);
 
     if (!result.success) {
@@ -1333,7 +1333,7 @@ app.post("/api/device/resume", heavyApiLimiter, async (req, res) => {
       return res.status(400).json({ error: "Device identifier is required" });
     }
 
-    const { resumeDevice } = await import('./services');
+    const { resumeDevice } = await import('./services.js');
     const result = await resumeDevice(identifier, identifierType);
 
     if (!result.success) {
@@ -1393,7 +1393,7 @@ app.post("/api/device/status", customerApiLimiter, async (req, res) => {
 
     setApiLogContext({ customerEmail: customerEmail || undefined, triggeredBy: 'device-status' });
     try {
-      const { getDeviceStatus } = await import('./services');
+      const { getDeviceStatus } = await import('./services.js');
       const device = await getDeviceStatus(identifier, identifierType);
 
       if (!device) {
@@ -2292,7 +2292,7 @@ app.get("/api/device/plans", customerApiLimiter, async (req, res) => {
       }
     }
 
-    const { getAvailablePlans } = await import('./services');
+    const { getAvailablePlans } = await import('./services.js');
     const allPlans = await getAvailablePlans();
 
     if (!allPlans) {
@@ -2439,7 +2439,7 @@ app.post("/api/subscription/pause/check-eligibility", async (req, res) => {
     const { subscriptionId } = req.body;
     if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
 
-    const { hasTravelAddon: hasTravelAddonFn, checkSubscriptionPaymentStatus } = await import('./services');
+    const { hasTravelAddon: hasTravelAddonFn, checkSubscriptionPaymentStatus } = await import('./services.js');
     const fullData = await fetchCustomerFullData(customerEmail);
 
     let targetSub: any = null;
@@ -2549,7 +2549,7 @@ app.post("/api/subscription/pause/add-travel-addon", async (req, res) => {
     }
     if (!ownsSubscription) return res.status(403).json({ error: "You do not own this subscription" });
 
-    const { addTravelAddonToSubscription } = await import('./services');
+    const { addTravelAddonToSubscription } = await import('./services.js');
     const result = await addTravelAddonToSubscription(subscriptionId);
 
     if (result.success) {
@@ -2604,7 +2604,7 @@ app.post("/api/subscription/pause/check-addon-payment", async (req, res) => {
     }
     if (!targetSub) return res.status(403).json({ error: "You do not own this subscription" });
 
-    const { checkSubscriptionPaymentStatus, hasTravelAddon: hasTravelAddonFn } = await import('./services');
+    const { checkSubscriptionPaymentStatus, hasTravelAddon: hasTravelAddonFn } = await import('./services.js');
     const paymentStatus = await checkSubscriptionPaymentStatus(subscriptionId);
     const hasTravelNow = hasTravelAddonFn(targetSub.subscriptionItems).found;
 
@@ -2689,7 +2689,7 @@ app.post("/api/subscription/pause/execute", async (req, res) => {
       return res.status(400).json({ error: "Please settle your outstanding balance before pausing" });
     }
 
-    const { hasTravelAddon: hasTravelAddonFn, pauseChargebeeSubscription } = await import('./services');
+    const { hasTravelAddon: hasTravelAddonFn, pauseChargebeeSubscription } = await import('./services.js');
     const travelCheck = hasTravelAddonFn(targetSub.subscriptionItems);
     if (!travelCheck.found) {
       return res.status(400).json({ error: "Travel add-on is required to pause subscription" });
@@ -4065,7 +4065,7 @@ app.get("/api/plan-change/options", async (req, res) => {
     const planId = req.query.planId as string;
     if (!planId) return res.status(400).json({ error: "Plan ID is required" });
 
-    const { getPlanChangeOptions } = await import('../shared/planChangeConfig');
+    const { getPlanChangeOptions } = await import('../shared/planChangeConfig.js');
     const options = getPlanChangeOptions(planId);
 
     res.json({ options: options || [] });
@@ -4114,8 +4114,8 @@ app.post("/api/plan-change/execute", async (req, res) => {
     if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
     if (!newPlanId) return res.status(400).json({ error: "New plan ID is required" });
 
-    const { getPlanChangeOptions } = await import('../shared/planChangeConfig');
-    const { fetchCustomerFullData } = await import('./services');
+    const { getPlanChangeOptions } = await import('../shared/planChangeConfig.js');
+    const { fetchCustomerFullData } = await import('./services.js');
 
     const fullData = await fetchCustomerFullData(customerEmail);
     let targetSub: any = null;
@@ -4143,7 +4143,7 @@ app.post("/api/plan-change/execute", async (req, res) => {
 
     const selectedOption = options.find((o: any) => o.planId === newPlanId)!;
 
-    const { changeSubscriptionPlan } = await import('./services');
+    const { changeSubscriptionPlan } = await import('./services.js');
     const result = await changeSubscriptionPlan(subscriptionId, newPlanId);
 
     if (result.success) {
@@ -4198,7 +4198,7 @@ app.post("/api/plan-change/cancel-scheduled", async (req, res) => {
     const { subscriptionId } = req.body;
     if (!subscriptionId) return res.status(400).json({ error: "Subscription ID is required" });
 
-    const { fetchCustomerFullData, removeScheduledChanges } = await import('./services');
+    const { fetchCustomerFullData, removeScheduledChanges } = await import('./services.js');
     const fullData = await fetchCustomerFullData(customerEmail);
     let found = false;
     for (const cbCust of fullData.chargebee.customers) {
@@ -4530,7 +4530,7 @@ app.get("/api/subscription/addons/available", customerApiLimiter, async (req, re
       return res.status(400).json({ error: itemsResult.error || "Failed to get subscription items" });
     }
 
-    const { getAvailableAddonsForSubscription } = await import("../shared/addonConfig");
+    const { getAvailableAddonsForSubscription } = await import("../shared/addonConfig.js");
     const { available, alreadyActive } = getAvailableAddonsForSubscription(itemsResult.items);
 
     const currentAddons = itemsResult.items
@@ -4566,7 +4566,7 @@ app.post("/api/subscription/addons/add", heavyApiLimiter, async (req, res) => {
       return res.status(403).json({ error: ownership.error || "Access denied" });
     }
 
-    const { getAddonByFamily } = await import("../shared/addonConfig");
+    const { getAddonByFamily } = await import("../shared/addonConfig.js");
     const addonDef = getAddonByFamily(addonFamily);
     if (!addonDef) {
       return res.status(400).json({ error: "Invalid add-on" });
@@ -4577,7 +4577,7 @@ app.post("/api/subscription/addons/add", heavyApiLimiter, async (req, res) => {
       return res.status(400).json({ error: "Failed to verify subscription" });
     }
 
-    const { getAvailableAddonsForSubscription } = await import("../shared/addonConfig");
+    const { getAvailableAddonsForSubscription } = await import("../shared/addonConfig.js");
     const { available } = getAvailableAddonsForSubscription(itemsResult.items);
     const isAvailable = available.some(a => a.family === addonFamily);
     if (!isAvailable) {
@@ -4641,7 +4641,7 @@ app.post("/api/subscription/addons/remove", heavyApiLimiter, async (req, res) =>
       return res.status(403).json({ error: ownership.error || "Access denied" });
     }
 
-    const { getAddonByFamily } = await import("../shared/addonConfig");
+    const { getAddonByFamily } = await import("../shared/addonConfig.js");
     const addonDef = getAddonByFamily(addonFamily);
     if (!addonDef) {
       return res.status(400).json({ error: "Invalid add-on" });

@@ -1,4 +1,4 @@
-import { storage } from './storage';
+import { storage } from './storage.js';
 
 const CHARGEBEE_API_KEY = process.env.CHARGEBEE_API_KEY;
 const CHARGEBEE_SITE = process.env.CHARGEBEE_SITE;
@@ -1532,7 +1532,7 @@ export async function removeAddonFromSubscription(subscriptionId: string, addonI
     const addonExists = currentItems.some((item: any) => item.item_price_id === addonItemPriceId && item.item_type === 'addon');
 
     if (!addonExists) {
-      const { isAddonInFamily, AVAILABLE_ADDONS } = await import('../shared/addonConfig');
+      const { isAddonInFamily, AVAILABLE_ADDONS } = await import('../shared/addonConfig.js');
       const addonDef = AVAILABLE_ADDONS.find(a => a.itemPriceId === addonItemPriceId);
       const family = addonDef?.family;
 

@@ -1,5 +1,5 @@
-import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, planChangeVerifications, addonLogs, externalApiLogs, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause, type PlanChangeVerification, type InsertPlanChangeVerification, type AddonLog, type InsertAddonLog, type ExternalApiLog, type InsertExternalApiLog } from "../shared/schema";
-import { db } from "./db";
+import { customers, otpCodes, sessions, escalationTickets, customerFeedback, slowSpeedSessions, adminUsers, portalSettings, cancellationRequests, subscriptionPauses, planChangeVerifications, addonLogs, externalApiLogs, type Customer, type InsertCustomer, type OtpCode, type InsertOtpCode, type Session, type InsertSession, type EscalationTicket, type InsertEscalationTicket, type CustomerFeedback, type InsertCustomerFeedback, type SlowSpeedSession, type InsertSlowSpeedSession, type AdminUser, type InsertAdminUser, type PortalSetting, type InsertPortalSetting, type CancellationRequest, type InsertCancellationRequest, type SubscriptionPause, type InsertSubscriptionPause, type PlanChangeVerification, type InsertPlanChangeVerification, type AddonLog, type InsertAddonLog, type ExternalApiLog, type InsertExternalApiLog } from "../shared/schema.js";
+import { db } from "./db.js";
 import { eq, and, gt, or, desc } from "drizzle-orm";
 
 export interface IStorage {
@@ -9,13 +9,13 @@ export interface IStorage {
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: number, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
   updateLastLogin(id: number): Promise<void>;
-  
+
   createOtpCode(otp: InsertOtpCode): Promise<OtpCode>;
   getValidOtpCode(target: string, code: string, type: string): Promise<OtpCode | undefined>;
   verifyOtpCode(target: string, code: string, type: string): Promise<OtpCode | undefined>;
   markOtpVerified(id: number): Promise<void>;
   invalidateOtpCodes(target: string, type: string): Promise<void>;
-  
+
   createSession(session: InsertSession): Promise<Session>;
   getSessionByToken(token: string): Promise<Session | undefined>;
   deleteSession(token: string): Promise<void>;
@@ -23,24 +23,24 @@ export interface IStorage {
   createEscalationTicket(ticket: InsertEscalationTicket): Promise<EscalationTicket>;
   getRecentEscalation(customerEmail: string, subscriptionId: string | null, iccid: string | null): Promise<EscalationTicket | undefined>;
   getEscalationByTicketId(ticketId: string): Promise<EscalationTicket | undefined>;
-  
+
   createFeedback(feedback: InsertCustomerFeedback): Promise<CustomerFeedback>;
   getFeedbackByCustomer(customerEmail: string): Promise<CustomerFeedback[]>;
-  
+
   createSlowSpeedSession(session: InsertSlowSpeedSession): Promise<SlowSpeedSession>;
   getSlowSpeedSession(id: number): Promise<SlowSpeedSession | undefined>;
   getRecentSlowSpeedRefresh(customerEmail: string, subscriptionId: string): Promise<SlowSpeedSession | undefined>;
   updateSlowSpeedSession(id: number, data: Partial<InsertSlowSpeedSession>): Promise<SlowSpeedSession | undefined>;
-  
+
   getAdminByEmail(email: string): Promise<AdminUser | undefined>;
   createAdmin(admin: InsertAdminUser): Promise<AdminUser>;
   getAllFeedback(): Promise<CustomerFeedback[]>;
   updateFeedbackResponse(id: number, response: string, respondedBy: string): Promise<CustomerFeedback | undefined>;
-  
+
   getPortalSetting(key: string): Promise<PortalSetting | undefined>;
   updatePortalSetting(key: string, value: string, updatedBy: string): Promise<PortalSetting | undefined>;
   getAllPortalSettings(): Promise<PortalSetting[]>;
-  
+
   createCancellationRequest(request: InsertCancellationRequest): Promise<CancellationRequest>;
   getCancellationRequest(id: number): Promise<CancellationRequest | undefined>;
   updateCancellationRequest(id: number, data: Partial<InsertCancellationRequest>): Promise<CancellationRequest | undefined>;
@@ -100,7 +100,7 @@ export class DatabaseStorage implements IStorage {
     const customer = await this.getCustomer(id);
     await db
       .update(customers)
-      .set({ 
+      .set({
         lastLoginAt: new Date(),
         loginCount: (customer?.loginCount || 0) + 1
       })
@@ -171,7 +171,7 @@ export class DatabaseStorage implements IStorage {
 
   async getRecentEscalation(customerEmail: string, subscriptionId: string | null, iccid: string | null): Promise<EscalationTicket | undefined> {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
+
     const conditions = [
       eq(escalationTickets.customerEmail, customerEmail.toLowerCase()),
       eq(escalationTickets.status, "open"),
@@ -190,7 +190,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(escalationTickets)
       .where(and(...conditions));
-    
+
     return ticket || undefined;
   }
 
@@ -225,7 +225,7 @@ export class DatabaseStorage implements IStorage {
 
   async getRecentSlowSpeedRefresh(customerEmail: string, subscriptionId: string): Promise<SlowSpeedSession | undefined> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    
+
     const [session] = await db
       .select()
       .from(slowSpeedSessions)
@@ -237,7 +237,7 @@ export class DatabaseStorage implements IStorage {
           gt(slowSpeedSessions.refreshStartedAt, sevenDaysAgo)
         )
       );
-    
+
     return session || undefined;
   }
 
@@ -270,9 +270,9 @@ export class DatabaseStorage implements IStorage {
   async updateFeedbackResponse(id: number, response: string, respondedBy: string): Promise<CustomerFeedback | undefined> {
     const [updated] = await db
       .update(customerFeedback)
-      .set({ 
-        adminResponse: response, 
-        respondedAt: new Date(), 
+      .set({
+        adminResponse: response,
+        respondedAt: new Date(),
         respondedBy,
         status: 'responded'
       })
@@ -293,11 +293,11 @@ export class DatabaseStorage implements IStorage {
       .set({ value, updatedAt: new Date(), updatedBy })
       .where(eq(portalSettings.key, key))
       .returning();
-    
+
     if (updated) {
       return updated;
     }
-    
+
     // If no existing record, insert new one
     const [inserted] = await db
       .insert(portalSettings)
@@ -343,7 +343,7 @@ export class DatabaseStorage implements IStorage {
   async checkRecentDiscountForSubscription(subscriptionId: string): Promise<boolean> {
     const twoMonthsAgo = new Date();
     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    
+
     const recentDiscount = await db
       .select()
       .from(cancellationRequests)
@@ -355,7 +355,7 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(1);
-    
+
     return recentDiscount.length > 0;
   }
 
